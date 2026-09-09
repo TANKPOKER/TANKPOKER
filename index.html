@@ -563,6 +563,9 @@ function ranked(hands,win,mode,now){
    ============================================================ */
 const SUPABASE_URL='https://dchnnklcyezqrgzxomeu.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_upwV5C62WhFNcrmP1KNZ3Q_fm9WeE-V';
+/* Client Google (flux popup sur TON domaine : l'écran Google affiche TANK,
+   pas l'URL Supabase). Vide = retour au flux redirect classique. */
+const GOOGLE_CLIENT_ID='733769774215-m15pl45si56odogds4bdkpas54hlupo0.apps.googleusercontent.com';
 
 let sb=null, LIVE=false, session=null;
 let BOOTING=!!(SUPABASE_URL&&SUPABASE_ANON_KEY);   // config présente : on charge
@@ -1021,8 +1024,38 @@ function viewAuth(){
 }
 async function doOAuth(provider){
   auth.err='';
-  // Supabase redirige vers Google/Apple puis revient ici ; le brouillon en
-  // cours survit au trajet puisqu'il est déjà persisté localement.
+  if(provider==='google'&&GOOGLE_CLIENT_ID&&window.isSecureContext){
+    try{
+      // Flux Google Identity Services : popup depuis NOTRE page. L'écran de
+      // consentement affiche le nom de l'app et notre domaine — jamais
+      // l'URL Supabase. Nonce : brut pour Supabase, haché pour Google.
+      const raw=(crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'');
+      const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+      const hashed=[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+      await new Promise((res,rej)=>{
+        if(window.google&&google.accounts) return res();
+        const sc=document.createElement('script');
+        sc.src='https://accounts.google.com/gsi/client';
+        sc.onload=res; sc.onerror=rej; document.head.appendChild(sc);
+      });
+      google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,nonce:hashed,
+        use_fedcm_for_prompt:true,
+        callback:async resp=>{
+          const r=await sb.auth.signInWithIdToken({provider:'google',
+            token:resp.credential,nonce:raw});
+          if(r.error){ auth.err=r.error.message; render(); }
+        }});
+      google.accounts.id.prompt(n=>{
+        // popup indisponible (bloqué, FedCM refusé…) : repli redirect
+        if(n.isNotDisplayed&&n.isNotDisplayed()||n.isSkippedMoment&&n.isSkippedMoment())
+          oauthRedirect(provider);
+      });
+      return;
+    }catch(e){ /* GIS injoignable : repli redirect */ }
+  }
+  oauthRedirect(provider);
+}
+async function oauthRedirect(provider){
   const r=await sb.auth.signInWithOAuth({provider,
     options:{redirectTo:(location.origin+location.pathname)}});
   if(r.error){ auth.err='Connexion '+provider+' indisponible : '+r.error.message; render(); }
