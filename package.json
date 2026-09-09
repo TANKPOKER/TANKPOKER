@@ -1,0 +1,14 @@
+{
+  "name": "tank",
+  "version": "1.0.0",
+  "description": "TANK — la review de mains de poker par la communauté. Site + PWA, un seul fichier, backend Supabase.",
+  "private": true,
+  "scripts": {
+    "extract": "node scripts/extract.js",
+    "pretest": "node scripts/extract.js",
+    "test": "node scripts/run-tests.js"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}

@@ -331,6 +331,8 @@ button{font-family:var(--font)}
 .ctrl button:disabled{opacity:.3}
 
 /* ---------- divers ---------- */
+.msg.err{border-color:var(--raise);color:var(--raise)}
+.msg.okm{border-color:var(--call);color:var(--call)}
 .msg{padding:11px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);
   font-size:13px;color:var(--muted);margin-bottom:10px}
 .msg b{color:var(--text);font-weight:600}
@@ -988,7 +990,7 @@ function autoTags(cfg,actions,board){
 }
 
 /* ---------- compte : inscription / connexion ---------- */
-let auth={mode:'signup',err:'',info:'',busy:false};
+let auth={email:'',err:'',info:'',busy:false};
 function viewAuth(){
   header('Compte',{back:stack.length>0});
   if(!LIVE){
@@ -998,34 +1000,23 @@ function viewAuth(){
       +'la marche à suivre complète est dans <b>mise-en-ligne.md</b>.</div>';
     return;
   }
-  const su=auth.mode==='signup';
   body.innerHTML=
-   '<button class="btn full oauth" id="oa-g">'
+   '<div class="msg" style="margin-bottom:14px">Pas de compte à créer : un lien de connexion '
+   +'arrive par email (ou passe par Google), et ton <b>pseudo</b> se choisit ensuite dans ton profil '
+   +'\u2014 il n\u2019a rien à voir avec ton identifiant.</div>'
+   +'<button class="btn full oauth" id="oa-g">'
    +'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 5.4c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.6 1.9 15 .8 12 .8 7.6.8 3.8 3.3 1.9 7l3.9 3C6.7 7.3 9.1 5.4 12 5.4z"/><path fill="#4285F4" d="M23.2 12.3c0-.9-.1-1.6-.2-2.3H12v4.5h6.3c-.3 1.5-1.1 2.7-2.4 3.6l3.8 2.9c2.2-2 3.5-5 3.5-8.7z"/><path fill="#FBBC05" d="M5.8 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1L1.9 7C1.1 8.5.7 10.2.7 12s.4 3.5 1.2 5l3.9-2.9z"/><path fill="#34A853" d="M12 23.2c3 0 5.6-1 7.4-2.7l-3.8-2.9c-1 .7-2.2 1.1-3.6 1.1-2.9 0-5.3-1.9-6.2-4.6L1.9 17c1.9 3.7 5.7 6.2 10.1 6.2z"/></svg>'
    +'Continuer avec Google</button>'
-   +'<button class="btn full oauth" id="oa-a" style="margin-top:8px">'
-   +'<svg width="15" height="17" viewBox="0 0 814 1000" aria-hidden="true"><path fill="currentColor" d="M788 341c-6 4-107 61-107 189 0 148 130 200 133 202-1 3-20 71-68 141-42 61-87 122-155 122s-86-40-164-40c-77 0-104 41-166 41s-106-57-155-127C50 785 0 664 0 549c0-184 120-282 238-282 63 0 115 41 155 41 38 0 97-44 169-44 27 0 125 3 226 77zM554 172c31-37 53-88 53-139 0-7-1-14-2-20-51 2-111 34-147 76-28 32-55 83-55 135 0 8 1 15 2 19 3 1 9 1 14 1 45 0 102-30 135-72z"/></svg>'
-   +'Continuer avec Apple</button>'
    +'<div class="orsep"><span>ou par email</span></div>'
-   +'<div class="rowbar" id="a-mode">'
-   +'<button class="seg'+(su?' on':'')+'" data-v="signup">Créer un compte</button>'
-   +'<button class="seg'+(su?'':' on')+'" data-v="login">Se connecter</button></div>'
-   +(su?'<div class="field"><span class="lbl">PSEUDO</span>'
-     +'<input class="cbox" id="a-h" maxlength="20" autocomplete="username" '
-     +'placeholder="lettres, chiffres, _ (3-20)"></div>':'')
    +'<div class="field"><span class="lbl">EMAIL</span>'
    +'<input class="cbox" id="a-em" type="email" autocomplete="email" placeholder="toi@exemple.fr"></div>'
-   +'<div class="field"><span class="lbl">MOT DE PASSE</span>'
-   +'<input class="cbox" id="a-pw" type="password" '
-   +'autocomplete="'+(su?'new-password':'current-password')+'" placeholder="8 caractères minimum"></div>'
-   +(auth.err?'<div class="msg" style="border-color:var(--raise);color:var(--raise)">'+auth.err+'</div>':'')
-   +(auth.info?'<div class="msg" style="border-color:var(--call);color:var(--call)">'+auth.info+'</div>':'');
-  bind('a-mode',v=>{auth.mode=v;auth.err='';auth.info='';render();});
+   +(auth.err?'<div class="msg err">'+auth.err+'</div>':'')
+   +(auth.info?'<div class="msg okm">'+auth.info+'</div>':'')
+   +'<button class="btn full pri" id="a-go"'+(auth.busy?' disabled':'')+'>'
+   +(auth.busy?'Envoi\u2026':'RECEVOIR MON LIEN DE CONNEXION')+'</button>';
   $('oa-g').onclick=()=>doOAuth('google');
-  $('oa-a').onclick=()=>doOAuth('apple');
-  foot.style.display='block';
-  foot.innerHTML='<div class="acts"><button class="act cy" id="a-go"'+(auth.busy?' disabled':'')+'>'
-   +(auth.busy?'\u2026':su?'CRÉER MON COMPTE':'SE CONNECTER')+'</button></div>';
+  $('a-em').value=auth.email||'';
+  $('a-em').oninput=e=>{auth.email=e.target.value;};
   $('a-go').onclick=doAuth;
 }
 async function doOAuth(provider){
@@ -1037,29 +1028,18 @@ async function doOAuth(provider){
   if(r.error){ auth.err='Connexion '+provider+' indisponible : '+r.error.message; render(); }
 }
 async function doAuth(){
-  const em=$('a-em').value.trim(), pw=$('a-pw').value;
+  const em=($('a-em').value||'').trim();
   auth.err=''; auth.info='';
   if(!/.+@.+\..+/.test(em)){ auth.err='Email invalide.'; render(); return; }
-  if(pw.length<8){ auth.err='Mot de passe : 8 caractères minimum.'; render(); return; }
-  if(auth.mode==='signup'){
-    const h=$('a-h').value.trim();
-    if(!/^[A-Za-z0-9_]{3,20}$/.test(h)){ auth.err='Pseudo : 3 à 20 caractères, lettres, chiffres ou _.'; render(); return; }
-    auth.busy=true; render();
-    const r=await sb.auth.signUp({email:em,password:pw,options:{data:{handle:h}}});
-    auth.busy=false;
-    if(r.error){ auth.err=r.error.message; render(); return; }
-    if(!r.data.session){
-      auth.info='Compte créé. Confirme ton adresse depuis l\'email reçu, puis connecte-toi.';
-      auth.mode='login'; render(); return;
-    }
-    // session immédiate (confirmation désactivée) : onAuthStateChange recharge tout
-  }else{
-    auth.busy=true; render();
-    const r=await sb.auth.signInWithPassword({email:em,password:pw});
-    auth.busy=false;
-    if(r.error){ auth.err='Identifiants incorrects.'; render(); return; }
-  }
-  stack=[]; route={v:'profile'};
+  auth.busy=true; render();
+  // signInWithOtp : connexion ET création silencieuse du compte au premier lien.
+  // Le pseudo n'intervient pas ici — dérivé par la base, modifiable au profil.
+  const r=await sb.auth.signInWithOtp({email:em,
+    options:{emailRedirectTo:(location.origin+location.pathname)}});
+  auth.busy=false;
+  if(r.error){ auth.err=r.error.message; render(); return; }
+  auth.info='Lien envoyé à '+em+'. Ouvre-le depuis ce téléphone \u2014 tu reviendras ici connecté.';
+  render();
 }
 
 /* ---------- activité : réactions et commentaires reçus ---------- */
@@ -1112,7 +1092,7 @@ function viewHome(){
   if(LIVE&&!DB.me){
     const recent=DB.hands.slice().sort((a,b)=>b.createdAt-a.createdAt);
     body.innerHTML='<div class="msg"><b>'+TAGLINE+'.</b> '
-      +'Crée ton compte pour publier tes mains, réagir et suivre des joueurs.</div>'
+      +'Connecte-toi (lien email ou Google) pour publier tes mains, réagir et suivre des joueurs.</div>'
       +'<button class="btn full" id="join" style="margin-bottom:14px">CRÉER MON COMPTE</button>'
       +(recent.length?'<span class="lbl">DERNIÈRES MAINS</span>'+recent.slice(0,20).map(handCard).join('')
         :'<div class="empty"><div class="big">Aucune main pour l\'instant</div>'
@@ -1985,7 +1965,7 @@ function viewResult(){
   $('q').oninput=e=>{ resDraft.q=e.target.value; syncPub(); };
   foot.style.display='block';
   foot.innerHTML='<div class="acts"><button class="act cy" id="pub">'
-   +(LIVE&&!DB.me?'CRÉER UN COMPTE POUR PUBLIER':'PUBLIER LA MAIN')+'</button></div>';
+   +(LIVE&&!DB.me?'SE CONNECTER POUR PUBLIER':'PUBLIER LA MAIN')+'</button></div>';
   $('pub').onclick=()=>{ if(!$('pub').disabled) publish(); };
   syncPub();
 }
