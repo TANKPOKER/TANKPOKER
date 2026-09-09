@@ -95,7 +95,16 @@ button{font-family:var(--font)}
 .tab .ic{font-size:16px;line-height:1}
 .tab.on{color:#FFFFFF;border-top-color:var(--cyan);background:rgba(255,255,255,.07)}
 .tab.on .ic{color:var(--cyan)}
-.tab.add .ic{color:var(--cyan)}
+.tabs{overflow:visible}
+.tab.add{overflow:visible}
+.tab.add .ic{display:flex;align-items:center;justify-content:center;
+  width:54px;height:54px;margin:-30px auto 3px;border-radius:50%;
+  background:linear-gradient(160deg,#00E5D4,#00A99B);color:#04211F;
+  border:4px solid var(--tabbg);
+  box-shadow:0 6px 18px rgba(0,216,200,.45)}
+.tab.add .ic svg{display:block}
+.tab.add{color:var(--cyan)}
+.tab.add.on .ic{background:linear-gradient(160deg,#00E5D4,#00A99B);color:#04211F}
 
 .lbl{font-family:var(--fd);font-size:12px;color:var(--muted);letter-spacing:.1em;
   font-weight:700;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
@@ -188,7 +197,14 @@ button{font-family:var(--font)}
   color:var(--muted);flex:0 0 auto}
 .hc .who{font-family:var(--fd);font-size:15px;font-weight:700;font-style:italic;
   color:var(--text);letter-spacing:.01em}
-.hc .when{font-size:11.5px;color:var(--dim);margin-left:auto}
+.when{margin-left:12px}
+.qplay{width:44px;height:44px;flex:0 0 auto;margin-left:auto;border-radius:50%;
+  border:none;color:#EAFBF1;font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding-left:3px;
+  background:linear-gradient(160deg,#1CA85A,#0E6B35);
+  box-shadow:0 4px 12px rgba(14,107,53,.45), inset 0 1px 0 rgba(255,255,255,.22)}
+.qplay:active{transform:scale(.94)}
+.hc .when{font-size:11.5px;color:var(--dim)}
 .hc .line{display:flex;align-items:center;gap:4px;margin-bottom:8px;flex-wrap:wrap}
 .hc .sep{color:var(--dim);font-size:11px;margin:0 3px}
 .hc .q{font-family:var(--fd);font-size:18px;font-weight:800;line-height:1.22;
@@ -213,6 +229,12 @@ button{font-family:var(--font)}
 
 /* ---------- table (rejeu optionnel) ---------- */
 .tw{position:relative;width:100%;height:390px;margin:2px 0 10px}
+/* En saisie, la table partage l'écran avec sizings + actions : plus compacte,
+   et encore un cran de moins sur les petits téléphones. Le replay garde 390px. */
+.ent .tw{height:308px;margin:0 0 6px}
+.ent .seat{width:76px}
+.ent .potline{margin-top:6px}
+@media (max-height:740px){ .ent .tw{height:272px} .ent .c-xs{width:26px;height:36px;font-size:13px} }
 .felt{position:absolute;left:5%;right:5%;top:5%;bottom:5%;border-radius:50%;
   background:radial-gradient(ellipse at 50% 40%,#2E9D63 0%,#1E7A47 48%,#125234 100%);
   border:9px solid #202B38;
@@ -221,22 +243,26 @@ button{font-family:var(--font)}
   border:1.5px solid rgba(255,255,255,.14)}
 .centre{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);text-align:center;width:100%}
 .tboard{display:flex;gap:4px;justify-content:center;min-height:45px;align-items:center}
-.potline{margin-top:9px;font-size:11.5px;letter-spacing:.07em;font-weight:700;color:#EAF4EE;
-  background:rgba(8,12,17,.55);border-radius:14px;padding:3px 12px;display:inline-block}
-.potline b{color:#FFFFFF}
+
+.potline{margin-top:9px;font-family:var(--fd);font-size:13px;letter-spacing:.07em;font-weight:800;
+  color:#DFF3E8;background:rgba(8,12,17,.72);border:1px solid rgba(255,255,255,.16);
+  border-radius:16px;padding:5px 15px;display:inline-block}
+.potline b{font-family:var(--fm);font-size:15px;font-weight:700;color:#FFFFFF;
+  text-shadow:0 1px 2px rgba(0,0,0,.5)}
 .wmark{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);width:74px;height:74px;
   pointer-events:none}.wmark svg{width:100%;height:100%}
-.potline b{font-family:var(--fm);color:var(--text);font-size:14px;font-weight:600}
-.street{position:absolute;left:50%;top:13.5%;transform:translate(-50%,-50%);
+
+.street{position:absolute;left:50%;top:26.5%;transform:translate(-50%,-50%);
   font-family:var(--fd);font-size:11px;font-weight:800;letter-spacing:.16em;color:#EAF4EE;
   background:rgba(8,12,17,.55);border:1px solid rgba(255,255,255,.14);
   border-radius:14px;padding:4px 13px}
 .seat{position:absolute;transform:translate(-50%,-50%);width:82px;text-align:center}
-.seat .hand{display:flex;gap:2px;justify-content:center;height:29px;margin-bottom:3px}
+.seat .hand{display:flex;gap:2px;justify-content:center;height:auto;
+  margin:-6px 0 5px;position:relative;z-index:1}
 .seat .plate{background:rgba(13,19,26,.92);border:1px solid #33404E;border-radius:6px;
   padding:4px 6px 5px;box-shadow:0 2px 6px rgba(0,0,0,.35)}
 .seat .nm{font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:.07em;color:#D7E0EA}
-.seat .stk{font-family:var(--fm);font-size:12.5px;font-weight:600;line-height:1.2;color:#93A3B4}
+.seat .stk{font-family:var(--fm);font-size:13.5px;font-weight:700;line-height:1.2;color:#EDF4FA}
 /* Le héros doit s'identifier en un quart de seconde : halo cyan autour de la
    plaque, fond teinté, étiquette TOI au-dessus des cartes. */
 .seat.hero .plate{border-color:var(--cyan);
@@ -246,7 +272,8 @@ button{font-family:var(--font)}
 .youtag{position:absolute;top:-16px;left:50%;transform:translateX(-50%);z-index:3;
   filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
 .youtag .crn{width:19px;height:15px;display:block}
-.seat.act .plate{background:var(--panel2);box-shadow:0 0 0 2px rgba(23,190,187,.45)}
+.seat.act .plate{background:#0D141C;border-color:#00D8C8;
+  box-shadow:0 0 0 2px rgba(0,216,200,.45),0 0 14px rgba(0,216,200,.25)}
 .seat.out{opacity:.3} .seat.out .plate{background:transparent}
 .seat.skip{cursor:pointer}
 .seat.skip .plate{border-style:dashed;border-color:var(--line2)}
@@ -338,12 +365,14 @@ button{font-family:var(--font)}
 .rule{border-top:1px solid var(--line);margin:14px 0}
 .mask{position:fixed;inset:0;background:rgba(8,11,14,.9);display:flex;align-items:flex-end;
   justify-content:center;z-index:50}
-.sheet{width:100%;max-width:440px;background:var(--panel);border-top:1px solid var(--line);
+.sheet{width:100%;max-width:440px;max-height:92vh;overflow-y:auto;
+  background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;
   padding:14px 12px calc(14px + env(safe-area-inset-bottom))}
 .sheet h2{font-size:14px;font-weight:600;margin-bottom:10px}
-.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:3px}
-.pk{aspect-ratio:.72;min-height:40px;border:1px solid rgba(0,0,0,.3);background:#EEF1F4;border-radius:3px;
-  font-size:12px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:4px}
+.pk{aspect-ratio:.68;min-height:50px;border:1px solid rgba(0,0,0,.3);background:#EEF1F4;
+  border-radius:4px;font-size:15px;font-weight:800;padding:0;
+  display:flex;align-items:center;justify-content:center;line-height:1}
 .pk.s-s{color:#14181D} .pk.s-h{color:#D63C36} .pk.s-d{color:#2C7BD1} .pk.s-c{color:#1F8A52}
 .pk:disabled{opacity:.13}
 .pk.on{outline:2px solid var(--cyan);outline-offset:-2px}
@@ -857,7 +886,8 @@ function renderTabs(){
   if(v==='setup'||v==='entry'||v==='result'){ tabs.style.display='none'; return; }
   tabs.style.display='flex';
   const n=unseenCount();
-  const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','+','SAISIR'],
+  const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">'
+   +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>','SAISIR'],
     ['activity','\u25C9','NOTIFS'+(n?' ('+n+')':'')],['profile','\u25CF','PROFIL']];
   tabs.innerHTML=items.map(([k,ic,l])=>'<button class="tab'+(v===k?' on':'')+(k==='setup'?' add':'')
     +'" data-v="'+k+'"><span class="ic"'+(k==='activity'&&n?' style="color:var(--cyan)"':'')+'>'
@@ -899,7 +929,9 @@ function handCard(h){
   const liked=MY.liked[h.id];
   return '<div class="hc" data-h="'+h.id+'">'
     +'<div class="top"><div class="av">'+initials(h.author)+'</div>'
-    +'<div class="who">'+p.name+'</div><div class="when">'+ago(h.createdAt)+'</div></div>'
+    +'<div class="who">'+p.name+'</div>'
+    +'<button class="qplay" data-rp="'+h.id+'" aria-label="replayer">\u25B6</button>'
+    +'<div class="when">'+ago(h.createdAt)+'</div></div>'
     +'<div class="line">'+h.cfg.heroCards.map(c=>card(c,'c-xs')).join('')
     +'<span class="sep">|</span>'
     +(h.board.length?h.board.map(c=>card(c,'c-xxs')).join(''):'<span class="sep">préflop</span>')
@@ -916,6 +948,9 @@ function handCard(h){
 }
 function bindCards(){
   body.querySelectorAll('.hc').forEach(el=>el.onclick=()=>go('hand',{id:el.dataset.h}));
+  /* replay en un tap depuis le fil, sans passer par la feuille */
+  body.querySelectorAll('.qplay').forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); rp={k:0,playing:false,tick:null}; go('replay',{id:b.dataset.rp}); });
   /* liker depuis le fil, sans perdre sa position de lecture */
   body.querySelectorAll('[data-like]').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); reactKeepScroll(b.dataset.like,'like'); });
@@ -1712,7 +1747,7 @@ function viewEntry(){
   store.set('draft',{S:S,memo:captureMemo});    // sauvé à chaque action
   header((cfg.stakes?cfg.stakes+' \u00b7 ':'')+(cfg.tableSize===2?'HU':cfg.tableSize+'-max'),
     {sup:'0:00',close:confirmQuit});
-  let h=tableHTML(S,lastBySeatFrom(S.actions,S.street),S.toAct);
+  let h='<div class="ent">'+tableHTML(S,lastBySeatFrom(S.actions,S.street),S.toAct)+'</div>';
   if(captureMemo&&captureMemo.boardMemo&&captureMemo.boardMemo.length)
     h+='<div class="msg" style="display:flex;gap:8px;align-items:center">'
       +'<span style="font-size:11px;color:var(--dim)">CAPTURE \u2014 BOARD NOTÉ</span>'
