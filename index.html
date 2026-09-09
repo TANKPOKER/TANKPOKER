@@ -237,6 +237,9 @@ button{font-family:var(--font)}
 .sitrow .chips{flex:1;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;
   -ms-overflow-style:none;padding-bottom:0}
 .sitrow .chips::-webkit-scrollbar{display:none}
+.fcount{font-size:11.5px;color:var(--muted);margin:2px 2px 10px;
+  font-family:var(--fd);letter-spacing:.03em}
+.fcount b{color:var(--cyan);font-size:13px}
 .hc .when{font-size:11.5px;color:var(--dim)}
 .hc .line{display:flex;align-items:center;gap:4px;margin-bottom:8px;flex-wrap:wrap}
 .hc .sep{color:var(--dim);font-size:11px;margin:0 3px}
@@ -1320,6 +1323,12 @@ function viewWeek(){
      +'<button class="chip rsn'+(wk.vs==='tous'?' on':'')+'" data-v="tous">tous</button>'
      +POSL.map(x=>'<button class="chip rsn'+(wk.vs===x?' on':'')+'" data-v="'+x+'">'+x+'</button>').join('')
    +'</div></div>'
+   +'<div class="fcount"><b>'+list.length+'</b> main'+(list.length>1?'s':'')
+     +' \u00b7 '+wk.win+' \u00b7 '+wk.mode
+     +(wk.fmt!=='tous'?' \u00b7 '+wk.fmt.toUpperCase():'')
+     +(wk.pot!=='tous'?' \u00b7 '+wk.pot:'')
+     +(wk.hero!=='tous'?' \u00b7 héros '+wk.hero:'')
+     +(wk.vs!=='tous'?' \u00b7 vs '+wk.vs:'')+'</div>'
    +(list.length?list.map(handCard).join('')
      :'<div class="empty"><div class="big">Rien avec ces filtres</div>'
       +'<p>Élargis la fenêtre ou retire un filtre.</p></div>');
