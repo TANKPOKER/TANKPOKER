@@ -222,6 +222,11 @@ button{font-family:var(--font)}
 .hrow .bdg{flex:0 0 auto}
 .hrow .hd{flex:0 0 auto;font-size:10.5px;color:var(--dim)}
 .mycmt{font-size:11.5px;color:var(--muted);font-style:italic;margin:-2px 0 2px 12px}
+.privrow{display:flex;gap:9px;align-items:flex-start;margin-top:14px;font-size:12.5px;
+  color:var(--muted);line-height:1.45;cursor:pointer}
+.privrow input{width:18px;height:18px;accent-color:var(--cyan);margin-top:1px}
+.hrow.priv{border-style:dashed;opacity:.85}
+.plock{flex:0 0 auto;font-size:14px;padding:2px 3px;cursor:pointer}
 /* filtres compacts (Hot) */
 .rowbar.mini .seg{padding:6px 3px;font-size:10.5px}
 .rowbar.mini{margin-bottom:6px}
@@ -666,7 +671,7 @@ async function cloudLoad(){
   (cm.data||[]).forEach(c=>{ (cms[c.hand_id]=cms[c.hand_id]||[])
     .push({by:c.author_id,street:c.street,t:c.body,at:Date.parse(c.created_at)}); });
   DB.hands=(hd.data||[]).map(r=>Object.assign({
-    id:r.id,author:r.author_id,question:r.question,potFinal:+r.pot_final,
+    id:r.id,author:r.author_id,question:r.question,private:!!r.is_private,potFinal:+r.pot_final,
     invested:+r.invested,result:+r.result,won:r.won,endReason:r.end_reason,
     tags:r.tags||[],createdAt:Date.parse(r.created_at),
     likes:likes[r.id]||0,dislikes:dislikes[r.id]||0,comments:cms[r.id]||[],
@@ -993,11 +998,21 @@ function header(title,opts){
 /* La ligne du héros, une case par décision, aux couleurs d'action : on lit
    l'agressivité d'une main sans lire un mot. */
 function handRow(h){
-  return '<button class="hrow" data-h="'+h.id+'">'
+  const mine=h.author===DB.me;
+  return '<button class="hrow'+(h.private?' priv':'')+'" data-h="'+h.id+'">'
    +h.cfg.heroCards.map(c=>card(c,'c-xxs')).join('')
    +'<span class="ht">'+h.question+'</span>'
    +'<span class="bdg '+(h.won?'win':'lose')+'">'+(h.result>0?'+':'')+fmt(h.result)+'</span>'
+   +(mine?'<span class="plock" data-pl="'+h.id+'" role="button" '
+     +'title="'+(h.private?'privée \u2014 rendre publique':'publique \u2014 rendre privée')+'">'
+     +(h.private?'\uD83D\uDD12':'\uD83C\uDF10')+'</span>':'')
    +'<span class="hd">'+ago(h.createdAt)+'</span></button>';
+}
+async function togglePrivate(id){
+  const h=getHand(id); if(!h||h.author!==DB.me) return;
+  h.private=!h.private; persistDemo(); render();
+  if(LIVE){ const r=await sb.from('hands').update({is_private:h.private}).eq('id',h.id);
+    if(r.error){ h.private=!h.private; persistDemo(); render(); console.error(r.error); } }
 }
 function handCard(h){
   const p=player(h.author);
@@ -1024,6 +1039,8 @@ function handCard(h){
 }
 function bindCards(){
   body.querySelectorAll('.hc,.hrow').forEach(el=>el.onclick=()=>go('hand',{id:el.dataset.h}));
+  body.querySelectorAll('.plock').forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); togglePrivate(b.dataset.pl); });
   /* replay en un tap depuis le fil, sans passer par la feuille */
   body.querySelectorAll('.qplay').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); rp={k:0,playing:false,tick:null,showQ:true}; go('replay',{id:b.dataset.rp}); });
@@ -1191,10 +1208,11 @@ function viewActivity(){
 function viewHome(){
   header('Feed');
   const me=DB.players[DB.me]||{following:[]};
-  const feed=DB.hands.filter(h=>me.following.includes(h.author)).sort((a,b)=>b.createdAt-a.createdAt);
+  const feed=DB.hands.filter(h=>me.following.includes(h.author)&&!h.private)
+    .sort((a,b)=>b.createdAt-a.createdAt);
   const others=Object.values(DB.players).filter(p=>p.id!==DB.me&&!me.following.includes(p.id));
   if(LIVE&&!DB.me){
-    const recent=DB.hands.slice().sort((a,b)=>b.createdAt-a.createdAt);
+    const recent=DB.hands.filter(h=>!h.private).sort((a,b)=>b.createdAt-a.createdAt);
     body.innerHTML='<div class="msg"><b>'+TAGLINE+'.</b> '
       +'Connecte-toi (lien email ou Google) pour publier tes mains, réagir et suivre des joueurs.</div>'
       +'<button class="btn full" id="join" style="margin-bottom:14px">CRÉER MON COMPTE</button>'
@@ -1238,7 +1256,7 @@ function viewHome(){
     const c=captures.find(x=>x.id===b.dataset.cap); if(!c) return;
     captureMemo=c; cfg=JSON.parse(JSON.stringify(c.cfg));
     S=newHand(JSON.parse(JSON.stringify(cfg))); hist=[];
-    resDraft={winners:[],cards:{},q:''};
+    resDraft={winners:[],cards:{},q:'',priv:false};
     stack=[{v:'home'}]; route={v:'entry'}; render(); startClock();
   });
   body.querySelectorAll('[data-capdel]').forEach(b=>b.onclick=()=>{
@@ -1280,7 +1298,7 @@ let wk={win:'semaine',mode:'likées',fmt:'tous',lim:'tous',pot:'tous',hero:'tous
 function filteredHands(){
   return DB.hands.filter(h=>
     (wk.fmt==='tous'||h.cfg.format===wk.fmt)&&
-    (wk.lim==='tous'||h.cfg.stakes===wk.lim));
+    (wk.lim==='tous'||h.cfg.stakes===wk.lim)&&!h.private);
 }
 function viewWeek(){
   header('Hot');
@@ -1468,7 +1486,9 @@ function viewHand(id){
   const p=player(H.author);
   header(p.name,{back:true,sup:ago(H.createdAt)});
   const pots=streetPots(H);
-  let h='<button class="btn play" id="rep">\u25B6 REPLAYER LA MAIN</button>'
+  let h=(H.private?'<div class="msg" style="border-color:var(--cyan-d)">\uD83D\uDD12 '
+    +'<b>Main privée</b> \u2014 toi seul la vois. Bascule depuis ton historique.</div>':'')
+   +'<button class="btn play" id="rep">\u25B6 REPLAYER LA MAIN</button>'
    +'<div style="font-size:14.5px;font-weight:500;margin-bottom:2px;line-height:1.4">'+H.question+'</div>'
    +'<div class="info">'
    +'<div><span class="k">FORMAT</span><span class="v">'
@@ -1811,7 +1831,7 @@ function viewSetup(){
    +(cfg.heroCards.length===2?'':' disabled')+'>DÉMARRER LA MAIN</button></div>';
   const b=$('go'); if(b) b.onclick=()=>{
     S=newHand(JSON.parse(JSON.stringify(cfg))); hist=[];
-    resDraft={winners:[],cards:{},q:''};   // jamais d'état hérité de la main précédente
+    resDraft={winners:[],cards:{},q:'',priv:false};   // jamais d'état hérité de la main précédente
     route={v:'entry'}; render(); startClock();
   };
   /* Capture rapide : cartes + board éventuel, complétée à froid. C'est le mode
@@ -1874,7 +1894,7 @@ function viewEntry(){
   foot.innerHTML=sizingsHTML()+actionsHTML(); bindFoot();
 }
 function confirmQuit(){
-  if(!S||!S.actions.length){ stopClock(); S=null; resDraft={winners:[],cards:{},q:''};
+  if(!S||!S.actions.length){ stopClock(); S=null; resDraft={winners:[],cards:{},q:'',priv:false};
     store.del('draft'); captureMemo=null; tabTo('home'); return; }
   const m=document.createElement('div'); m.className='mask';
   m.innerHTML='<div class="sheet"><h2>Abandonner cette main ?</h2>'
@@ -1885,7 +1905,7 @@ function confirmQuit(){
   document.body.appendChild(m);
   m.querySelector('#no').onclick=()=>m.remove();
   m.querySelector('#yes').onclick=()=>{m.remove();stopClock();S=null;
-    resDraft={winners:[],cards:{},q:''};
+    resDraft={winners:[],cards:{},q:'',priv:false};
     store.del('draft'); captureMemo=null; tabTo('home');};
 }
 /* Trois régimes de sizing, chacun dans son langage natif — toujours affiché en bb :
@@ -2004,7 +2024,7 @@ function bindNote(a){
 function push(){ hist.push(JSON.stringify(S)); if(hist.length>60) hist.shift(); }
 function undo(){ if(!hist.length) return; S=JSON.parse(hist.pop()); if(!S.over&&!timer)startClock(); render(); }
 
-let resDraft={winners:[],cards:{},q:''};
+let resDraft={winners:[],cards:{},q:'',priv:false};
 function viewResult(){
   header('Résultat',{back:true});
   const order=SEAT_ORDER[S.cfg.tableSize];
@@ -2055,7 +2075,10 @@ function viewResult(){
    +'<textarea class="cbox" id="q" rows="2" maxlength="140" '
    +'placeholder="'+autoTitle(S.cfg,S.actions,S.board).replace(/"/g,'')+'">'+resDraft.q+'</textarea>'
    +'<div style="font-size:11.5px;color:var(--dim);margin-top:5px">Laisse vide pour utiliser '
-   +'ce titre. Pose une question si tu veux des avis.</div></div>';
+   +'ce titre. Pose une question si tu veux des avis.</div></div>'
+   +'<label class="privrow"><input type="checkbox" id="r-priv"'+(resDraft.priv?' checked':'')+'>'
+   +'<span><b>\uD83D\uDD12 Main privée</b> \u2014 visible par toi seul, pour tes notes. '
+   +'Réversible à tout moment depuis ton historique.</span></label>';
   body.innerHTML=h;
 
   body.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{
@@ -2072,6 +2095,7 @@ function viewResult(){
   // du champ, donc on synchronise l'état disabled à chaque frappe.
   const syncPub=()=>{ const b=$('pub'); if(b) b.disabled=!resDraft.winners.length; };
   $('q').oninput=e=>{ resDraft.q=e.target.value; syncPub(); };
+  $('r-priv').onchange=e=>{ resDraft.priv=e.target.checked; };
   foot.style.display='block';
   foot.innerHTML='<div class="acts"><button class="act cy" id="pub">'
    +(LIVE&&!DB.me?'SE CONNECTER POUR PUBLIER':'PUBLIER LA MAIN')+'</button></div>';
@@ -2091,6 +2115,7 @@ async function publish(){
     showdown:Object.keys(resDraft.cards).length?Object.assign({},resDraft.cards):null,
     result:round2(won?S.potClosed/resDraft.winners.length-inv:-inv),
     question:(resDraft.q.trim()||autoTitle(S.cfg,S.actions,S.board)).slice(0,140),
+    private:resDraft.priv,
     createdAt:Date.now(),likes:0,dislikes:0,comments:[],
     tags:autoTags(S.cfg,S.actions,S.board)};
   if(LIVE){
@@ -2100,7 +2125,7 @@ async function publish(){
       winners:h.winners,alive:h.alive};
     const r=await sb.from('hands').insert({author_id:DB.me,question:h.question,payload,
       pot_final:h.potFinal,invested:h.invested,result:h.result,won:h.won,
-      end_reason:h.endReason,tags:h.tags}).select('id,created_at').single();
+      end_reason:h.endReason,tags:h.tags,is_private:h.private}).select('id,created_at').single();
     if(r.error){
       const b=$('pub'); if(b){ b.textContent='ÉCHEC — RÉESSAYER'; b.disabled=false; }
       console.error(r.error); return;
@@ -2108,7 +2133,7 @@ async function publish(){
     h.id=r.data.id; h.createdAt=Date.parse(r.data.created_at);
   }
   DB.hands.push(h);
-  S=null; resDraft={winners:[],cards:{},q:''}; stopClock(); hist=[];
+  S=null; resDraft={winners:[],cards:{},q:'',priv:false}; stopClock(); hist=[];
   store.del('draft');
   if(captureMemo){ captures=captures.filter(c=>c.id!==captureMemo.id);
     store.set('captures',captures); captureMemo=null; }
