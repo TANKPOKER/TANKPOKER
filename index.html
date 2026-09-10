@@ -1401,6 +1401,8 @@ const SOC_ICONS={
  x:'<svg viewBox="0 0 24 24"><path fill="currentColor" d="M17.7 3H21l-7.3 8.3L22.2 21h-6.6l-5.2-6.1L4.5 21H1.2l7.8-8.9L1.8 3h6.8l4.7 5.6L17.7 3zm-1.2 16h1.8L7.4 4.9H5.5L16.5 19z"/></svg>',
  yt:'<svg viewBox="0 0 24 24"><rect x="2" y="5.5" width="20" height="13" rx="3.5" fill="currentColor"/><path d="M10 9.3v5.4l5-2.7z" fill="var(--panel)"/></svg>'};
 const SOC_URL={ig:'https://instagram.com/',tt:'https://tiktok.com/@',x:'https://x.com/',yt:'https://youtube.com/@'};
+function esc(v){ return String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+  .replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function socialRow(p){
   const so=p.socials||{};
   const ks=['ig','tt','x','yt'].filter(k=>so[k]);
