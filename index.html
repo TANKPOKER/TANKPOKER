@@ -70,6 +70,7 @@ button{font-family:var(--font)}
 .hbrand{display:flex;align-items:center;gap:8px;background:none;border:0;padding:0;cursor:pointer;
   color:var(--text);font:inherit}
 .btn.oauth{display:flex;align-items:center;justify-content:center;gap:9px;font-size:13.5px}
+.gwrap{display:flex;justify-content:center;min-height:44px}
 .btn.play{display:block;width:100%;margin:0 0 14px;padding:13px;font-family:var(--fd);
   font-size:14px;font-weight:800;letter-spacing:.08em;color:#04211F;
   background:var(--cyan);border-color:var(--cyan);border-radius:10px}
@@ -1222,9 +1223,8 @@ function viewAuth(){
    '<div class="msg" style="margin-bottom:14px">Pas de compte à créer : un lien de connexion '
    +'arrive par email (ou passe par Google), et ton <b>pseudo</b> se choisit ensuite dans ton profil '
    +'\u2014 il n\u2019a rien à voir avec ton identifiant.</div>'
-   +'<button class="btn full oauth" id="oa-g">'
-   +'<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 5.4c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.6 1.9 15 .8 12 .8 7.6.8 3.8 3.3 1.9 7l3.9 3C6.7 7.3 9.1 5.4 12 5.4z"/><path fill="#4285F4" d="M23.2 12.3c0-.9-.1-1.6-.2-2.3H12v4.5h6.3c-.3 1.5-1.1 2.7-2.4 3.6l3.8 2.9c2.2-2 3.5-5 3.5-8.7z"/><path fill="#FBBC05" d="M5.8 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1L1.9 7C1.1 8.5.7 10.2.7 12s.4 3.5 1.2 5l3.9-2.9z"/><path fill="#34A853" d="M12 23.2c3 0 5.6-1 7.4-2.7l-3.8-2.9c-1 .7-2.2 1.1-3.6 1.1-2.9 0-5.3-1.9-6.2-4.6L1.9 17c1.9 3.7 5.7 6.2 10.1 6.2z"/></svg>'
-   +'Continuer avec Google</button>'
+   +'<div class="gwrap" id="gbtn"></div>'
+   +'<button class="btn full oauth" id="oa-g" style="display:none">Continuer avec Google</button>'
    +'<div class="orsep"><span>ou par email</span></div>'
    +'<div class="field"><span class="lbl">EMAIL</span>'
    +'<input class="cbox" id="a-em" type="email" autocomplete="email" placeholder="toi@exemple.fr"></div>'
@@ -1232,44 +1232,40 @@ function viewAuth(){
    +(auth.info?'<div class="msg okm">'+auth.info+'</div>':'')
    +'<button class="btn full pri" id="a-go"'+(auth.busy?' disabled':'')+'>'
    +(auth.busy?'Envoi\u2026':'RECEVOIR MON LIEN DE CONNEXION')+'</button>';
-  $('oa-g').onclick=()=>doOAuth('google');
+  $('oa-g').onclick=()=>oauthRedirect('google');
+  mountGoogle();
   $('a-em').value=auth.email||'';
   $('a-em').oninput=e=>{auth.email=e.target.value;};
   $('a-go').onclick=doAuth;
 }
-async function doOAuth(provider){
-  auth.err='';
-  if(provider==='google'&&GOOGLE_CLIENT_ID&&window.isSecureContext){
-    try{
-      // Flux Google Identity Services : popup depuis NOTRE page. L'écran de
-      // consentement affiche le nom de l'app et notre domaine — jamais
-      // l'URL Supabase. Nonce : brut pour Supabase, haché pour Google.
-      const raw=(crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'');
-      const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
-      const hashed=[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
-      await new Promise((res,rej)=>{
-        if(window.google&&google.accounts) return res();
-        const sc=document.createElement('script');
-        sc.src='https://accounts.google.com/gsi/client';
-        sc.onload=res; sc.onerror=rej; document.head.appendChild(sc);
-      });
-      google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,nonce:hashed,
-        use_fedcm_for_prompt:true,
-        callback:async resp=>{
-          const r=await sb.auth.signInWithIdToken({provider:'google',
-            token:resp.credential,nonce:raw});
-          if(r.error){ auth.err=r.error.message; render(); }
-        }});
-      google.accounts.id.prompt(n=>{
-        // popup indisponible (bloqué, FedCM refusé…) : repli redirect
-        if(n.isNotDisplayed&&n.isNotDisplayed()||n.isSkippedMoment&&n.isSkippedMoment())
-          oauthRedirect(provider);
-      });
-      return;
-    }catch(e){ /* GIS injoignable : repli redirect */ }
-  }
-  oauthRedirect(provider);
+async function mountGoogle(){
+  const box=$('gbtn'); if(!box) return;
+  const fallback=()=>{ box.style.display='none';
+    const b=$('oa-g'); if(b) b.style.display='flex'; };
+  if(!LIVE||!GOOGLE_CLIENT_ID||!window.isSecureContext){ fallback(); return; }
+  try{
+    await new Promise((res,rej)=>{
+      if(window.google&&google.accounts) return res();
+      const sc=document.createElement('script');
+      sc.src='https://accounts.google.com/gsi/client';
+      sc.onload=res; sc.onerror=rej; document.head.appendChild(sc);
+    });
+    const raw=(crypto.randomUUID()+crypto.randomUUID()).replace(/-/g,'');
+    const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(raw));
+    const hashed=[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,nonce:hashed,
+      callback:async resp=>{
+        const r=await sb.auth.signInWithIdToken({provider:'google',
+          token:resp.credential,nonce:raw});
+        if(r.error){ auth.err=r.error.message; render(); }
+      }});
+    /* bouton OFFICIEL : pas de période de blocage (contrairement à One Tap),
+       et son popup affiche le nom de l'app, jamais l'URL Supabase */
+    google.accounts.id.renderButton(box,{type:'standard',theme:'outline',
+      size:'large',text:'continue_with',shape:'pill',width:330,locale:'fr'});
+  }catch(e){ fallback(); }
 }
+async function doOAuth(provider){ oauthRedirect(provider); }
 async function oauthRedirect(provider){
   const r=await sb.auth.signInWithOAuth({provider,
     options:{redirectTo:(location.origin+location.pathname)}});
