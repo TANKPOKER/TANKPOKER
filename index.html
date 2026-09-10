@@ -241,6 +241,12 @@ button{font-family:var(--font)}
 .fh{min-width:0;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fh i{display:block;font-style:normal;font-weight:500;font-size:11.5px;color:var(--muted)}
 .fdel{color:var(--raise);border-color:var(--raise-d);font-size:11px;flex:0 0 auto}
+.shlnk{font-family:var(--fm);font-size:11.5px;color:var(--muted);background:var(--panel2);
+  border:1px solid var(--line);border-radius:7px;padding:9px 10px;margin-bottom:12px;
+  word-break:break-all}
+.shwa{margin-top:8px;background:#1FAF52;border-color:#1FAF52;color:#fff;text-align:center;
+  text-decoration:none;display:block}
+.btn:is(a){text-decoration:none;text-align:center;display:block}
 /* filtres compacts (Hot) */
 .rowbar.mini .seg{padding:6px 3px;font-size:10.5px}
 .rowbar.mini{margin-bottom:6px}
@@ -1027,6 +1033,33 @@ function handRow(h){
      +'<span class="pdel" data-del="'+h.id+'" role="button" title="supprimer">\u2715</span>':'')
    +'<span class="hd">'+ago(h.createdAt)+'</span></button>';
 }
+async function shareHand(H){
+  const link=(location.origin+location.pathname).replace(/[#?].*$/,'')+'#/main/'+H.id;
+  const title=H.question||'Une main de poker à débattre';
+  /* la feuille de partage du téléphone (WhatsApp, Insta, SMS, AirDrop…),
+     comme les grosses applis — repli maison si le navigateur ne l'a pas */
+  if(navigator.share){
+    try{ await navigator.share({title:'TANK \u2014 '+title, text:title, url:link}); return; }
+    catch(e){ if(e&&e.name==='AbortError') return; /* annulé par l'utilisateur */ }
+  }
+  const m=document.createElement('div'); m.className='mask';
+  m.innerHTML='<div class="sheet"><h2>Partager la main</h2>'
+   +'<div class="shlnk">'+link+'</div>'
+   +'<button class="btn full" id="sh-cp">\uD83D\uDCCB COPIER LE LIEN</button>'
+   +'<a class="btn full shwa" id="sh-wa" target="_blank" rel="noopener" '
+   +'href="https://wa.me/?text='+encodeURIComponent(title+' '+link)+'">WhatsApp</a>'
+   +'<a class="btn full" style="margin-top:8px" target="_blank" rel="noopener" '
+   +'href="https://x.com/intent/tweet?text='+encodeURIComponent(title)+'&url='+encodeURIComponent(link)+'">X / Twitter</a>'
+   +'<button class="btn full" id="sh-x" style="margin-top:8px">FERMER</button></div>';
+  document.body.appendChild(m);
+  m.onclick=e=>{ if(e.target===m) m.remove(); };
+  m.querySelector('#sh-x').onclick=()=>m.remove();
+  m.querySelector('#sh-cp').onclick=async()=>{
+    try{ await navigator.clipboard.writeText(link);
+      m.querySelector('#sh-cp').textContent='\u2713 COPIÉ'; }
+    catch(e){ prompt('Lien de la main :',link); }
+  };
+}
 function askDelete(id){
   const H=getHand(id); if(!H||H.author!==DB.me) return;
   const m=document.createElement('div'); m.className='mask';
@@ -1530,13 +1563,23 @@ function editProfile(id){
    +'<button class="act cy" id="e-ok">ENREGISTRER</button></div></div>';
   document.body.appendChild(m);
   m.querySelector('#e-no').onclick=()=>m.remove();
+  const herr=(t)=>{ m.querySelector('#e-h').style.borderColor='var(--raise)';
+    let e=m.querySelector('#e-herr');
+    if(!e){ e=document.createElement('div'); e.id='e-herr'; e.className='msg err';
+      e.style.margin='6px 0 0'; m.querySelector('#e-h').parentNode.appendChild(e); }
+    e.textContent=t; };
   m.querySelector('#e-ok').onclick=async()=>{
     const h=m.querySelector('#e-h').value.trim();
-    if(!/^[A-Za-z0-9_]{3,20}$/.test(h)){
-      m.querySelector('#e-h').style.borderColor='var(--raise)'; return; }
-    const taken=Object.values(DB.players)
-      .some(x=>x.id!==id&&x.handle.toLowerCase()===h.toLowerCase());
-    if(taken){ m.querySelector('#e-h').style.borderColor='var(--raise)'; return; }
+    const changed=h.toLowerCase()!==p.handle.toLowerCase();
+    /* pseudo inchangé = aucune validation : on peut éditer bio/réseaux
+       sans que le pseudo s'en mêle */
+    if(changed){
+      if(!/^[A-Za-z0-9_]{3,20}$/.test(h)){
+        herr('Pseudo : 3 à 20 caractères, lettres/chiffres/_ seulement.'); return; }
+      const taken=Object.values(DB.players)
+        .some(x=>x.id!==id&&x.handle.toLowerCase()===h.toLowerCase());
+      if(taken){ herr('Ce pseudo est déjà pris.'); return; }
+    }
     p.name=m.querySelector('#e-nm').value.trim()||h;
     p.stakes=m.querySelector('#e-st').value.trim();
     p.bio=m.querySelector('#e-bio').value.trim();
@@ -1546,12 +1589,13 @@ function editProfile(id){
       tt:clean(m.querySelector('#e-tt').value),
       x:clean(m.querySelector('#e-x').value),
       yt:clean(m.querySelector('#e-yt').value)};
-    if(LIVE){ const r=await sb.from('profiles')
-        .update({handle:h,name:p.name,stakes:p.stakes,bio:p.bio,socials:p.socials}).eq('id',id);
-      if(r.error){ // pseudo pris entre-temps (index unique) : signalé, rien d'écrasé
-        m.querySelector('#e-h').style.borderColor='var(--raise)';
+    if(LIVE){ const upd={name:p.name,stakes:p.stakes,bio:p.bio,socials:p.socials};
+      if(changed) upd.handle=h;   // le pseudo ne part en base que s'il change
+      const r=await sb.from('profiles').update(upd).eq('id',id);
+      if(r.error){ // pris entre-temps (index unique) ou colonne manquante : dit clairement
+        herr(r.error.code==='23505'?'Ce pseudo vient d\'être pris.':('Base : '+r.error.message));
         console.error(r.error); return; }
-      p.handle=h;
+      if(changed) p.handle=h;
     } else { p.handle=h; store.set('profileEdit',
       {handle:h,name:p.name,stakes:p.stakes,bio:p.bio,socials:p.socials}); }
     m.remove(); render();
@@ -1673,11 +1717,7 @@ function viewHand(id){
       };
     };
   }
-  $('shr').onclick=async()=>{
-    const link=(location.origin+location.pathname).replace(/[#?].*$/,'')+'#/main/'+H.id;
-    try{ await navigator.clipboard.writeText(link); $('shr').textContent='\u2713 LIEN COPIÉ'; }
-    catch(e){ prompt('Lien de la main :',link); }
-  };
+  $('shr').onclick=()=>shareHand(H);
   /* Réagir est le geste central : la barre reste sous le pouce, visible sans scroller. */
   const liked=MY.liked[H.id];
   foot.style.display='block';
