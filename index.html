@@ -2137,7 +2137,14 @@ async function publish(){
       pot_final:h.potFinal,invested:h.invested,result:h.result,won:h.won,
       end_reason:h.endReason,tags:h.tags,is_private:h.private}).select('id,created_at').single();
     if(r.error){
-      const b=$('pub'); if(b){ b.textContent='ÉCHEC — RÉESSAYER'; b.disabled=false; }
+      const b=$('pub'); if(b){ b.textContent='ÉCHEC — RÉESSAYER'; b.disabled=false;
+        let e=$('puberr');
+        if(!e){ e=document.createElement('div'); e.id='puberr'; e.className='msg err';
+          e.style.marginTop='8px'; b.parentNode.appendChild(e); }
+        e.textContent='Base : '+r.error.message
+          +(/is_private|column/i.test(r.error.message)
+            ?' — re-exécute supabase-schema.sql dans le SQL Editor.':'');
+      }
       console.error(r.error); return;
     }
     h.id=r.data.id; h.createdAt=Date.parse(r.data.created_at);
