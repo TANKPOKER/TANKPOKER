@@ -62,7 +62,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 #app{width:100%;max-width:440px;min-height:100dvh;display:flex;flex-direction:column;position:relative}
 button{font-family:var(--font)}
 
-.hdr{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);
+.hdr{display:flex;align-items:center;gap:10px;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px;border-bottom:1px solid var(--line);
   min-height:48px;background:var(--bg);position:sticky;top:0;z-index:20}
 .hdr .sect{font-size:13.5px;color:var(--muted);font-weight:500;padding-left:10px;
   border-left:1px solid var(--line2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
