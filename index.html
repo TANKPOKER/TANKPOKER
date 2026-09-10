@@ -246,6 +246,9 @@ button{font-family:var(--font)}
   word-break:break-all}
 .shwa{margin-top:8px;background:#1FAF52;border-color:#1FAF52;color:#fff;text-align:center;
   text-decoration:none;display:block}
+.nedit{margin-left:auto;flex:0 0 auto;font-size:12px;padding:3px 5px;cursor:pointer;opacity:.75}
+.arow .amt~.nedit,.arow .ai~.nedit{margin-left:6px}
+.why.big{font-size:13.5px;line-height:1.55;padding:11px 13px}
 .btn:is(a){text-decoration:none;text-align:center;display:block}
 /* filtres compacts (Hot) */
 .rowbar.mini .seg{padding:6px 3px;font-size:10.5px}
@@ -286,13 +289,14 @@ button{font-family:var(--font)}
   border-color:var(--cyan-d);background:var(--cyan-i)}
 
 /* ---------- table (rejeu optionnel) ---------- */
-.tw{position:relative;width:100%;height:390px;margin:2px 0 10px}
+.tw{position:relative;width:100%;height:390px;margin:2px 0 18px}
 /* En saisie, la table partage l'écran avec sizings + actions : plus compacte,
    et encore un cran de moins sur les petits téléphones. Le replay garde 390px. */
-.ent .tw{height:308px;margin:0 0 6px}
+.ent .tw{height:308px;margin:0 0 40px}
 .ent .seat{width:76px}
 .ent .potline{margin-top:6px}
-@media (max-height:740px){ .ent .tw{height:272px} .ent .c-xs{width:26px;height:36px;font-size:13px} }
+@media (max-height:740px){ .ent .tw{height:272px;margin-bottom:44px}
+  .ent .c-xs{width:26px;height:36px;font-size:13px} }
 .felt{position:absolute;left:5%;right:5%;top:5%;bottom:5%;border-radius:50%;
   background:radial-gradient(ellipse at 50% 40%,#2E9D63 0%,#1E7A47 48%,#125234 100%);
   border:9px solid #202B38;
@@ -323,15 +327,34 @@ button{font-family:var(--font)}
 .seat .stk{font-family:var(--fm);font-size:13.5px;font-weight:700;line-height:1.2;color:#EDF4FA}
 /* Le héros doit s'identifier en un quart de seconde : halo cyan autour de la
    plaque, fond teinté, étiquette TOI au-dessus des cartes. */
+.seat.act.hero .plate{border-color:#FFC53D}
 .seat.hero .plate{border-color:var(--cyan);
-  background:linear-gradient(165deg,var(--cyan-i),var(--panel));
+  background:linear-gradient(165deg,#07352F,#0D141C);
   box-shadow:0 0 0 1.5px var(--cyan),0 0 16px rgba(0,216,200,.35)}
 .seat.hero .nm{color:var(--cyan);font-weight:800}
 .youtag{position:absolute;top:-16px;left:50%;transform:translateX(-50%);z-index:3;
   filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))}
 .youtag .crn{width:19px;height:15px;display:block}
-.seat.act .plate{background:#0D141C;border-color:#00D8C8;
-  box-shadow:0 0 0 2px rgba(0,216,200,.45),0 0 14px rgba(0,216,200,.25)}
+/* Parole = AMBRE : complémentaire du feutre vert, rien d'autre n'est ambre
+   sur la table. Anneau épais, halo large, pulsation d'échelle, barre dessous. */
+:is(.seat.act){z-index:5}
+.seat.act .plate{background:#141006;border-color:#FFC53D;position:relative;
+  animation:actpulse 1.4s ease-in-out infinite}
+.seat.act .nm{color:#FFD97A}
+.seat.act .plate::after{content:'';position:absolute;left:10%;right:10%;bottom:-7px;
+  height:4px;border-radius:2px;background:#FFC53D;
+  box-shadow:0 0 8px rgba(255,197,61,.8)}
+@keyframes actpulse{
+  0%,100%{box-shadow:0 0 0 3px rgba(255,197,61,.55),0 0 18px rgba(255,197,61,.35);
+    transform:scale(1)}
+  50%{box-shadow:0 0 0 4px rgba(255,197,61,.95),0 0 30px rgba(255,197,61,.6);
+    transform:scale(1.05)}}
+.turn{font-family:var(--fd);font-size:11px;font-weight:800;letter-spacing:.09em;
+  color:var(--muted);text-align:center;padding:5px 0 7px;display:flex;
+  align-items:center;justify-content:center;gap:6px}
+.turn b{color:#FFC53D}
+.turn.you{color:var(--cyan)} .turn.you b{color:var(--cyan)}
+.turn .crn{width:15px;height:12px}
 .seat.out{opacity:.3} .seat.out .plate{background:transparent}
 .seat.skip{cursor:pointer}
 .seat.skip .plate{border-style:dashed;border-color:var(--line2)}
@@ -1033,6 +1056,33 @@ function handRow(h){
      +'<span class="pdel" data-del="'+h.id+'" role="button" title="supprimer">\u2715</span>':'')
    +'<span class="hd">'+ago(h.createdAt)+'</span></button>';
 }
+function payloadOf(h){
+  return {cfg:h.cfg,board:h.board,actions:h.actions,showdown:h.showdown,
+    winners:h.winners,alive:h.alive};
+}
+function noteEditor(H,k){
+  if(H.author!==DB.me) return;
+  const a=H.actions[k];
+  const m=document.createElement('div'); m.className='mask';
+  m.innerHTML='<div class="sheet"><h2>Note \u00b7 '+a.pos+' '+alabel(a.type)+'</h2>'
+   +'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Ton raisonnement sur cette action '
+   +'\u2014 visible par tous. Modifiable quand tu veux.</div>'
+   +'<textarea class="cbox" id="ne-t" rows="4" maxlength="280" '
+   +'placeholder="Pourquoi ce choix ici\u2026">'+esc(a.note||'')+'</textarea>'
+   +'<div style="display:flex;gap:8px;margin-top:10px">'
+   +'<button class="btn" id="ne-x" style="flex:1">ANNULER</button>'
+   +'<button class="btn full pri" id="ne-ok" style="flex:2">ENREGISTRER</button></div></div>';
+  document.body.appendChild(m);
+  m.onclick=e=>{ if(e.target===m) m.remove(); };
+  m.querySelector('#ne-x').onclick=()=>m.remove();
+  m.querySelector('#ne-ok').onclick=async()=>{
+    const old=a.note;
+    a.note=m.querySelector('#ne-t').value.trim(); a.notePrivate=false;
+    m.remove(); persistDemo(); render();
+    if(LIVE){ const r=await sb.from('hands').update({payload:payloadOf(H)}).eq('id',H.id);
+      if(r.error){ a.note=old; persistDemo(); render(); console.error(r.error); } }
+  };
+}
 async function shareHand(H){
   const link=(location.origin+location.pathname).replace(/[#?].*$/,'')+'#/main/'+H.id;
   const title=H.question||'Une main de poker à débattre';
@@ -1115,6 +1165,9 @@ function bindCards(){
     e.stopPropagation(); togglePrivate(b.dataset.pl); });
   body.querySelectorAll('.pdel').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); askDelete(b.dataset.del); });
+  body.querySelectorAll('.nedit').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const H2=getHand(route.id); if(H2) noteEditor(H2,+b.dataset.n); });
   /* replay en un tap depuis le fil, sans passer par la feuille */
   body.querySelectorAll('.qplay').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); rp={k:0,playing:false,tick:null,showQ:true}; go('replay',{id:b.dataset.rp}); });
@@ -1656,15 +1709,19 @@ function viewHand(id){
         +(b.length?'<span class="cards">'+b.map(c=>card(c,'c-xs')).join('')+'</span>':'')
         +'<span class="pot">pot <b>'+fmt(pots[cur]||0)+'</b> bb</span></div>';
     }
+    const gi=H.actions.indexOf(a), mineH=H.author===DB.me;
     h+='<div class="arow'+(a.hero?' hero':'')+'"><span class="pos">'+a.pos+'</span>'
       +'<span class="slot">'+(a.hero?CROWN:'')+'</span>'
       +'<span class="ap '+aclass(a.type)+'">'+alabel(a.type)+'</span>'
       +(a.type==='bet'||a.type==='raise'?'<span class="amt">'+fmt(a.amount)+' bb</span>':'')
-      +(a.allIn?'<span class="ai">TAPIS</span>':'')+'</div>';
-    if(a.hero&&!a.notePrivate&&(a.reasons.length||a.note))
-      h+='<div class="why">'+(a.reasons.length?'<div class="tagline">'
+      +(a.allIn?'<span class="ai">TAPIS</span>':'')
+      +(mineH?'<span class="nedit" data-n="'+gi+'" role="button" title="note">'
+        +(a.note||(a.reasons&&a.reasons.length)?'\u270E':'\uD83D\uDCAC')+'</span>':'')
+      +'</div>';
+    if(!a.notePrivate&&((a.reasons&&a.reasons.length)||a.note))
+      h+='<div class="why">'+((a.reasons&&a.reasons.length)?'<div class="tagline">'
         +a.reasons.map(r=>'<span class="t">'+r+'</span>').join('')+'</div>':'')
-        +(a.note||'')+'</div>';
+        +esc(a.note||'')+'</div>';
   });
 
   h+=showdownHTML(H);
@@ -1858,9 +1915,10 @@ function viewReplay(id){
       +'<span class="ap '+aclass(last.type)+'">'+alabel(last.type)+'</span>'
       +(last.type==='bet'||last.type==='raise'?'<span class="amt">'+fmt(last.amount)+' bb</span>':'')+'</div>'
      :'<div class="msg">Appuie sur lecture pour dérouler la main.</div>')
-   +(last&&last.hero&&!last.notePrivate&&(last.reasons.length||last.note)
-     ?'<div class="why">'+(last.reasons.length?'<div class="tagline">'
-       +last.reasons.map(r=>'<span class="t">'+r+'</span>').join('')+'</div>':'')+(last.note||'')+'</div>':'');
+   +(last&&!last.notePrivate&&((last.reasons&&last.reasons.length)||last.note)
+     ?'<div class="why big">'+((last.reasons&&last.reasons.length)?'<div class="tagline">'
+       +last.reasons.map(r=>'<span class="t">'+r+'</span>').join('')+'</div>':'')
+       +esc(last.note||'')+'</div>':'');
   foot.style.display='block';
   foot.innerHTML='<div class="ctrl"><button id="fic" title="voir la fiche">FICHE</button>'
    +'<button id="rst">\u21ba</button>'
@@ -2005,10 +2063,13 @@ function viewEntry(){
       +'<span style="font-size:11px;color:var(--dim)">CAPTURE \u2014 BOARD NOTÉ</span>'
       +captureMemo.boardMemo.map(c=>card(c,'c-xs')).join(' ')+'</div>';
   if(!S.over&&S.toAct!==null&&S.seats.some((p,i)=>canSkipTo(S,i)))
-    h+='<div style="font-size:11.5px;color:var(--dim);margin:-4px 0 8px;text-align:center">'
+    h+='<div style="font-size:11.5px;color:var(--dim);margin:0 0 8px;text-align:center">'
       +'Touche un joueur pour lui passer la parole \u2014 ceux d\'avant se couchent ou checkent.</div>';
   const last=S.actions[S.actions.length-1];
-  if(last&&last.hero&&!S.over) h+=noteHTML(last);
+  /* le panneau de note ne vit QUE pendant le tour du héros : parole passée,
+     panneau parti. Rattrapage : le ✎ sur la main publiée. */
+  const heroTurn=!S.over&&S.toAct!==null&&S.seats[S.toAct]&&S.seats[S.toAct].hero;
+  if(heroTurn) h+=noteHTML(pend,true);
   body.innerHTML=h;
   /* toucher un siège = fold/check automatiques jusqu'à lui, annulables en une fois */
   body.querySelectorAll('.seat[data-i]').forEach(el=>{
@@ -2017,7 +2078,8 @@ function viewEntry(){
     el.classList.add('skip');
     el.onclick=()=>{ push(); if(skipCore(S,i)) render(); else hist.pop(); };
   });
-  if(last&&last.hero&&!S.over) bindNote(last);
+  const heroTurn2=!S.over&&S.toAct!==null&&S.seats[S.toAct]&&S.seats[S.toAct].hero;
+  if(heroTurn2) bindNote(pend);
   foot.style.display='block';
   if(S.over){
     stopClock();
@@ -2110,11 +2172,17 @@ function wheelValue(so,raw){
 }
 function actionsHTML(){
   const lg=legal(S), c=toCall(S);
+  const p=S.seats[S.toAct];
+  const turn=p?(p.hero
+    ?'<div class="turn you">'+CROWN+' À TOI \u00b7 <b>'+p.pos+'</b>'
+      +(c>0?' \u2014 '+fmt(c)+' bb à payer':'')+'</div>'
+    :'<div class="turn">PAROLE \u00b7 <b>'+p.pos+'</b>'
+      +(c>0?' \u2014 '+fmt(c)+' bb à payer':'')+'</div>'):'';
   const mid=lg.check?'<button class="act pass" data-a="check">CHECK</button>'
    :'<button class="act pass" data-a="call">CALL '+fmt(c)+'</button>';
   const agg=lg.bet?'<button class="act go" data-a="bet">MISER</button>'
    :lg.raise?'<button class="act go" data-a="raise">RELANCER</button>':'';
-  return '<div class="acts">'
+  return turn+'<div class="acts">'
    +'<button class="act" id="ub" style="flex:0 0 52px;font-size:17px"'
    +(hist.length?'':' disabled')+' aria-label="annuler la dernière action">\u21A9</button>'
    +'<button class="act fold" data-a="fold"'+(lg.fold?'':' disabled')
@@ -2139,17 +2207,38 @@ function bindFoot(){
     foot.querySelectorAll('.sz').forEach(x=>x.classList.remove('on')); b.classList.add('on');});
   foot.querySelectorAll('.act[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
-    if(a==='bet'||a==='raise'){ if(pendingAmt===null){b.animate([{opacity:.4},{opacity:1}],160);return;}
+    const wasHero=S.seats[S.toAct]&&S.seats[S.toAct].hero;
+    if(a==='bet'||a==='raise'){
+      if(pendingAmt===null){
+        b.animate([{opacity:.4},{opacity:1}],160);
+        const sz=foot.querySelector('.sizings');
+        if(sz){ sz.animate([{outline:'2px solid #FFC53D',outlineOffset:'2px'},
+          {outline:'2px solid transparent'}],{duration:900}); }
+        let hint=$('szhint');
+        if(!hint){ hint=document.createElement('div'); hint.id='szhint';
+          hint.className='turn'; hint.style.color='#FFC53D';
+          hint.textContent='\u2191 choisis un sizing (ou la molette) puis RELANCER';
+          const acts=foot.querySelector('.acts'); acts.parentNode.insertBefore(hint,acts); }
+        return;
+      }
       push();apply(S,a,pendingAmt); } else { push();apply(S,a); }
+    if(wasHero&&(pend.note||pend.reasons.length)){
+      const na=S.actions[S.actions.length-1];
+      na.note=pend.note; na.reasons=pend.reasons.slice(); na.notePrivate=pend.notePrivate;
+    }
+    pend={note:'',reasons:[],notePrivate:false};
     pendingSize=null;pendingAmt=null;render();});
 }
 const REASONS=['avantage de range','protection','pot control','blocage','il ne folde jamais',
   'read physique','spot ICM','cote implicite'];
-function noteHTML(a){
-  const open=a.reasons.length||a.note;
+function noteHTML(a,pending){
+  /* jamais d'auto-ouverture : le panneau s'ouvre au tap, et toute action
+     saisie le referme au rendu suivant — le texte reste sur l'action. */
+  const open=false;
   return '<div class="note'+(open?' open':'')+'" id="note"><div class="hd" id="nh">'
-   +'<span style="color:var(--dim)">\u25be</span> pourquoi ce '+(a.type==='bet'?'sizing':a.type)
-   +' ? <span style="color:var(--dim);margin-left:auto">optionnel</span></div><div class="bd">'
+   +'<span style="color:var(--dim)">\u25be</span> '
+   +'ta note sur cette décision'
+   +' <span style="color:var(--dim);margin-left:auto">optionnel</span></div><div class="bd">'
    +'<div class="chips" id="nr">'+REASONS.map(r=>'<button class="chip rsn'+(a.reasons.includes(r)?' on':'')
      +'" data-v="'+r+'">'+r+'</button>').join('')+'</div>'
    +'<textarea id="nt" rows="2" maxlength="200" placeholder="ajouter un mot\u2026">'+a.note+'</textarea>'
@@ -2167,6 +2256,7 @@ function bindNote(a){
 function push(){ hist.push(JSON.stringify(S)); if(hist.length>60) hist.shift(); }
 function undo(){ if(!hist.length) return; S=JSON.parse(hist.pop()); if(!S.over&&!timer)startClock(); render(); }
 
+let pend={note:'',reasons:[],notePrivate:false};   // note de la décision en cours (héros)
 let resDraft={winners:[],cards:{},q:'',priv:false};
 function viewResult(){
   header('Résultat',{back:true});
