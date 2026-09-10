@@ -1748,7 +1748,11 @@ function viewHand(id){
    +'</div><button class="btn full" id="send">Publier</button></div>';
 
   body.innerHTML=h;
-  $('rep').onclick=()=>{rp={k:0,playing:false,tick:null};go('replay',{id:H.id});};
+  $('rep').onclick=()=>{rp={k:0,playing:false,tick:null,showQ:true};go('replay',{id:H.id});};
+  /* les ✎/💬 de la feuille : leur liaison vivait dans bindCards(), jamais
+     appelée ici — les boutons étaient dessinés mais morts */
+  body.querySelectorAll('.nedit').forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); noteEditor(H,+b.dataset.n); });
   $('pr').onclick=()=>go('profile',{id:H.author});
   if(H.author===DB.me){
     body.insertAdjacentHTML('beforeend',
