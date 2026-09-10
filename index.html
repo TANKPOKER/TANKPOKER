@@ -86,7 +86,7 @@ button{font-family:var(--font)}
 .hdr .sup{font-family:var(--fm);font-size:12px;color:var(--muted);margin-left:auto}
 .ib{width:40px;height:40px;border-radius:5px;border:1px solid var(--line);background:var(--panel);
   color:var(--text);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.body{flex:1;overflow-y:auto;padding:12px 13px 18px}
+.body{flex:1;overflow-y:auto;padding:12px 13px 58px}
 .foot{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
 .tabs{display:flex;border-top:1px solid var(--tabline);background:var(--tabbg);
   padding-bottom:env(safe-area-inset-bottom)}
@@ -96,7 +96,7 @@ button{font-family:var(--font)}
 .tab .ic{font-size:16px;line-height:1}
 .tab.on{color:#FFFFFF;border-top-color:var(--cyan);background:rgba(255,255,255,.07)}
 .tab.on .ic{color:var(--cyan)}
-.tabs{overflow:visible}
+.tabs{overflow:visible;position:relative;z-index:40}
 .tab.add{overflow:visible}
 .tab.add .ic{display:flex;align-items:center;justify-content:center;
   width:54px;height:54px;margin:-30px auto 3px;border-radius:50%;
@@ -228,6 +228,19 @@ button{font-family:var(--font)}
 .privrow input{width:18px;height:18px;accent-color:var(--cyan);margin-top:1px}
 .hrow.priv{border-style:dashed;opacity:.85}
 .plock{flex:0 0 auto;font-size:14px;padding:2px 3px;cursor:pointer}
+.pdel{flex:0 0 auto;color:var(--raise);font-size:12px;font-weight:700;padding:4px 5px;cursor:pointer}
+.soc{display:flex;gap:9px;margin-top:10px}
+.socb{width:34px;height:34px;border-radius:9px;border:1px solid var(--cardline);
+  background:var(--card2);color:var(--muted);display:flex;align-items:center;justify-content:center}
+.socb svg{width:18px;height:18px}
+.socb:active{color:var(--cyan);border-color:var(--cyan)}
+.stat.tap{background:none;border:none;font:inherit;color:inherit;cursor:pointer;text-align:inherit}
+.frow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.fgo{flex:1;display:flex;align-items:center;gap:10px;background:none;border:none;
+  color:var(--text);font:inherit;cursor:pointer;text-align:left;min-width:0}
+.fh{min-width:0;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fh i{display:block;font-style:normal;font-weight:500;font-size:11.5px;color:var(--muted)}
+.fdel{color:var(--raise);border-color:var(--raise-d);font-size:11px;flex:0 0 auto}
 /* filtres compacts (Hot) */
 .rowbar.mini .seg{padding:6px 3px;font-size:10.5px}
 .rowbar.mini{margin-bottom:6px}
@@ -660,7 +673,8 @@ async function cloudLoad(){
   ]);
   DB.players={}; DB.hands=[]; MY.liked={};
   (pr.data||[]).forEach(p=>DB.players[p.id]={id:p.id,handle:p.handle,
-    name:p.name||p.handle,stakes:p.stakes||'',bio:p.bio||'',following:[]});
+    name:p.name||p.handle,stakes:p.stakes||'',bio:p.bio||'',
+    socials:p.socials||{},following:[]});
   (fl.data||[]).forEach(f=>{ const x=DB.players[f.follower_id];
     if(x) x.following.push(f.followed_id); });
   const likes={},dislikes={},cms={};
@@ -1009,8 +1023,29 @@ function handRow(h){
    +'<span class="bdg '+(h.won?'win':'lose')+'">'+(h.result>0?'+':'')+fmt(h.result)+'</span>'
    +(mine?'<span class="plock" data-pl="'+h.id+'" role="button" '
      +'title="'+(h.private?'privée \u2014 rendre publique':'publique \u2014 rendre privée')+'">'
-     +(h.private?'\uD83D\uDD12':'\uD83C\uDF10')+'</span>':'')
+     +(h.private?'\uD83D\uDD12':'\uD83C\uDF10')+'</span>'
+     +'<span class="pdel" data-del="'+h.id+'" role="button" title="supprimer">\u2715</span>':'')
    +'<span class="hd">'+ago(h.createdAt)+'</span></button>';
+}
+function askDelete(id){
+  const H=getHand(id); if(!H||H.author!==DB.me) return;
+  const m=document.createElement('div'); m.className='mask';
+  m.innerHTML='<div class="sheet"><h2>Supprimer cette main ?</h2>'
+    +'<div style="font-size:13.5px;color:var(--muted);margin-bottom:12px">'
+    +'Réactions et commentaires partiront avec. Définitif.</div>'
+    +'<div class="acts"><button class="act" id="hd-no">GARDER</button>'
+    +'<button class="act fold" id="hd-yes">SUPPRIMER</button></div></div>';
+  document.body.appendChild(m);
+  m.querySelector('#hd-no').onclick=()=>m.remove();
+  m.onclick=e=>{ if(e.target===m) m.remove(); };
+  m.querySelector('#hd-yes').onclick=async()=>{
+    m.remove();
+    DB.hands=DB.hands.filter(x=>x.id!==H.id);
+    delete MY.liked[H.id];
+    persistDemo(); render();
+    if(LIVE){ const r=await sb.from('hands').delete().eq('id',H.id);
+      if(r.error) console.error(r.error); }
+  };
 }
 async function togglePrivate(id){
   const h=getHand(id); if(!h||h.author!==DB.me) return;
@@ -1045,6 +1080,8 @@ function bindCards(){
   body.querySelectorAll('.hc,.hrow').forEach(el=>el.onclick=()=>go('hand',{id:el.dataset.h}));
   body.querySelectorAll('.plock').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); togglePrivate(b.dataset.pl); });
+  body.querySelectorAll('.pdel').forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); askDelete(b.dataset.del); });
   /* replay en un tap depuis le fil, sans passer par la feuille */
   body.querySelectorAll('.qplay').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); rp={k:0,playing:false,tick:null,showQ:true}; go('replay',{id:b.dataset.rp}); });
@@ -1358,6 +1395,21 @@ function commentedHands(id){
     .sort((a,b)=>b.last-a.last||b.h.createdAt-a.h.createdAt)
     .map(x=>x.h);
 }
+const SOC_ICONS={
+ ig:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.4" fill="currentColor"/></svg>',
+ tt:'<svg viewBox="0 0 24 24"><path fill="currentColor" d="M14.5 3h3c.2 1.9 1.4 3.4 3.5 3.8v3c-1.4 0-2.6-.4-3.7-1.1v6.6c0 3.3-2.6 5.7-5.8 5.7A5.65 5.65 0 0 1 5.8 15.3c0-3.2 2.5-5.7 5.7-5.7l.9.1v3.1l-.9-.2c-1.5 0-2.7 1.2-2.7 2.7 0 1.5 1.2 2.7 2.7 2.7 1.6 0 2.9-1.2 2.9-2.8L14.5 3z"/></svg>',
+ x:'<svg viewBox="0 0 24 24"><path fill="currentColor" d="M17.7 3H21l-7.3 8.3L22.2 21h-6.6l-5.2-6.1L4.5 21H1.2l7.8-8.9L1.8 3h6.8l4.7 5.6L17.7 3zm-1.2 16h1.8L7.4 4.9H5.5L16.5 19z"/></svg>',
+ yt:'<svg viewBox="0 0 24 24"><rect x="2" y="5.5" width="20" height="13" rx="3.5" fill="currentColor"/><path d="M10 9.3v5.4l5-2.7z" fill="var(--panel)"/></svg>'};
+const SOC_URL={ig:'https://instagram.com/',tt:'https://tiktok.com/@',x:'https://x.com/',yt:'https://youtube.com/@'};
+function socialRow(p){
+  const so=p.socials||{};
+  const ks=['ig','tt','x','yt'].filter(k=>so[k]);
+  if(!ks.length) return '';
+  return '<div class="soc">'+ks.map(k=>
+    '<a class="socb" href="'+SOC_URL[k]+encodeURIComponent(so[k])
+    +'" target="_blank" rel="noopener noreferrer" aria-label="'+k+'">'
+    +SOC_ICONS[k]+'</a>').join('')+'</div>';
+}
 function viewProfile(id){
   const p=DB.players[id], me=id===DB.me;
   header(me?'Mon profil':p.name,{back:!me&&stack.length>0});
@@ -1369,11 +1421,12 @@ function viewProfile(id){
    +'<div><div style="font-size:18px;font-weight:700">'+p.name+'</div>'
    +'<div style="font-size:12.5px;color:var(--muted)">@'+p.handle+' \u00b7 '+p.stakes+'</div></div></div>'
    +'<div style="font-size:13.5px;color:var(--muted);margin-top:9px">'+p.bio+'</div>'
+   +socialRow(p)
    +'<div class="stats"><div class="stat"><div class="v">'+hands.length+'</div><div class="k">MAINS PUBLIÉES</div></div>'
    +'<div class="stat"><div class="v">'+likes+'</div><div class="k">LIKES REÇUS</div></div>'
    +'<div class="stat"><div class="v">'+cmts+'</div><div class="k">COMMENTAIRES</div></div>'
-   +'<div class="stat"><div class="v">'+Object.values(DB.players).filter(q=>(q.following||[]).includes(id)).length+'</div><div class="k">ABONNÉS</div></div>'
-   +'<div class="stat"><div class="v">'+(p.following||[]).length+'</div><div class="k">ABONNEMENTS</div></div></div>'
+   +'<button class="stat tap" id="st-fers"><div class="v">'+Object.values(DB.players).filter(q=>(q.following||[]).includes(id)).length+'</div><div class="k">ABONNÉS</div></button>'
+   +'<button class="stat tap" id="st-fing"><div class="v">'+(p.following||[]).length+'</div><div class="k">ABONNEMENTS</div></button></div>'
    +(me?'':'<button class="btn full'+(DB.players[DB.me].following.includes(id)?' on':'')+'" id="fol">'
       +(DB.players[DB.me].following.includes(id)?'Abonné':'S\'abonner')+'</button>')
    +'<div class="rule"></div>'
@@ -1412,6 +1465,8 @@ function viewProfile(id){
   const pt=$('p-tab');
   if(pt) [...pt.children].forEach(b=>b.onclick=()=>{profTab=b.dataset.v;render();});
   const f=$('fol'); if(f) f.onclick=()=>{toggleFollow(id);render();};
+  $('st-fers').onclick=()=>openFollowSheet('fers',id);
+  $('st-fing').onclick=()=>openFollowSheet('fing',id);
   if(me){
     body.insertAdjacentHTML('beforeend',
       '<div class="rule"></div><button class="btn full" id="pe">MODIFIER LE PROFIL</button>'
@@ -1428,6 +1483,27 @@ function viewProfile(id){
   bindCards();
 }
 
+function openFollowSheet(kind,id){
+  const list=kind==='fers'
+    ? Object.values(DB.players).filter(q=>(q.following||[]).includes(id))
+    : (DB.players[id].following||[]).map(x=>DB.players[x]).filter(Boolean);
+  const m=document.createElement('div'); m.className='mask';
+  m.innerHTML='<div class="sheet"><h2>'+(kind==='fers'?'Abonnés':'Abonnements')+' \u00b7 '+list.length+'</h2>'
+   +(list.length?list.map(q=>
+      '<div class="frow"><button class="fgo" data-p="'+q.id+'">'
+      +'<span class="av">'+initials(q.id)+'</span>'
+      +'<span class="fh">@'+q.handle+'<i>'+q.name+'</i></span></button>'
+      +(kind==='fing'&&id===DB.me
+        ?'<button class="btn fdel" data-u="'+q.id+'">RETIRER</button>':'')
+      +'</div>').join('')
+     :'<div class="empty" style="padding:20px 0"><p>Personne pour l\'instant.</p></div>')
+   +'<button class="btn full" id="fs-x" style="margin-top:10px">FERMER</button></div>';
+  document.body.appendChild(m);
+  m.querySelector('#fs-x').onclick=()=>m.remove();
+  m.onclick=e=>{ if(e.target===m) m.remove(); };
+  m.querySelectorAll('.fgo').forEach(b=>b.onclick=()=>{ m.remove(); go('profile',{id:b.dataset.p}); });
+  m.querySelectorAll('.fdel').forEach(b=>b.onclick=()=>{ toggleFollow(b.dataset.u); m.remove(); render(); });
+}
 function editProfile(id){
   const p=DB.players[id];
   const m=document.createElement('div'); m.className='mask';
@@ -1438,6 +1514,14 @@ function editProfile(id){
    +'<input class="cbox" id="e-nm" maxlength="30" value="'+p.name.replace(/"/g,'&quot;')+'"></div>'
    +'<div class="field"><span class="lbl">LIMITES JOUÉES</span>'
    +'<input class="cbox" id="e-st" maxlength="40" value="'+p.stakes.replace(/"/g,'&quot;')+'"></div>'
+   +'<div class="field"><span class="lbl">INSTAGRAM</span>'
+   +'<input class="cbox" id="e-ig" maxlength="40" placeholder="ton.pseudo" value="'+esc((p.socials||{}).ig||'')+'"></div>'
+   +'<div class="field"><span class="lbl">TIKTOK</span>'
+   +'<input class="cbox" id="e-tt" maxlength="40" placeholder="ton.pseudo" value="'+esc((p.socials||{}).tt||'')+'"></div>'
+   +'<div class="field"><span class="lbl">X / TWITTER</span>'
+   +'<input class="cbox" id="e-x" maxlength="40" placeholder="ton_pseudo" value="'+esc((p.socials||{}).x||'')+'"></div>'
+   +'<div class="field"><span class="lbl">YOUTUBE</span>'
+   +'<input class="cbox" id="e-yt" maxlength="40" placeholder="ta_chaine" value="'+esc((p.socials||{}).yt||'')+'"></div>'
    +'<div class="field"><span class="lbl">BIO</span>'
    +'<textarea class="cbox" id="e-bio" rows="3" maxlength="280">'+p.bio+'</textarea></div>'
    +'<div class="acts"><button class="act" id="e-no">ANNULER</button>'
@@ -1454,13 +1538,20 @@ function editProfile(id){
     p.name=m.querySelector('#e-nm').value.trim()||h;
     p.stakes=m.querySelector('#e-st').value.trim();
     p.bio=m.querySelector('#e-bio').value.trim();
+    const clean=v=>v.trim().replace(/^.*\//,'').replace(/^@/,'')
+      .replace(/[^A-Za-z0-9._-]/g,'').slice(0,30);
+    p.socials={ig:clean(m.querySelector('#e-ig').value),
+      tt:clean(m.querySelector('#e-tt').value),
+      x:clean(m.querySelector('#e-x').value),
+      yt:clean(m.querySelector('#e-yt').value)};
     if(LIVE){ const r=await sb.from('profiles')
-        .update({handle:h,name:p.name,stakes:p.stakes,bio:p.bio}).eq('id',id);
+        .update({handle:h,name:p.name,stakes:p.stakes,bio:p.bio,socials:p.socials}).eq('id',id);
       if(r.error){ // pseudo pris entre-temps (index unique) : signalé, rien d'écrasé
         m.querySelector('#e-h').style.borderColor='var(--raise)';
         console.error(r.error); return; }
       p.handle=h;
-    } else { p.handle=h; store.set('profileEdit',{handle:h,name:p.name,stakes:p.stakes,bio:p.bio}); }
+    } else { p.handle=h; store.set('profileEdit',
+      {handle:h,name:p.name,stakes:p.stakes,bio:p.bio,socials:p.socials}); }
     m.remove(); render();
   };
 }
