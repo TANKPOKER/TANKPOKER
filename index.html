@@ -293,10 +293,10 @@ button{font-family:var(--font)}
 .tw{position:relative;width:100%;height:390px;margin:2px 0 18px}
 /* En saisie, la table partage l'écran avec sizings + actions : plus compacte,
    et encore un cran de moins sur les petits téléphones. Le replay garde 390px. */
-.ent .tw{height:308px;margin:0 0 40px}
+.ent .tw{height:clamp(212px,calc(100dvh - 500px),308px);margin:0 0 40px}
 .ent .seat{width:76px}
 .ent .potline{margin-top:6px}
-@media (max-height:740px){ .ent .tw{height:272px;margin-bottom:44px}
+@media (max-height:740px){ .ent .tw{margin-bottom:44px}
   .ent .c-xs{width:26px;height:36px;font-size:13px} }
 .felt{position:absolute;left:5%;right:5%;top:5%;bottom:5%;border-radius:50%;
   background:radial-gradient(ellipse at 50% 40%,#2E9D63 0%,#1E7A47 48%,#125234 100%);
@@ -322,6 +322,8 @@ button{font-family:var(--font)}
 .seat{position:absolute;transform:translate(-50%,-50%);width:82px;text-align:center}
 .seat .hand{display:flex;gap:2px;justify-content:center;height:auto;
   margin:-6px 0 5px;position:relative;z-index:1}
+.eyeoff{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  font-size:15px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
 .seat .plate{background:rgba(13,19,26,.92);border:1px solid #33404E;border-radius:6px;
   padding:4px 6px 5px;box-shadow:0 2px 6px rgba(0,0,0,.35)}
 .seat .nm{font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:.07em;color:#D7E0EA}
@@ -453,8 +455,8 @@ button{font-family:var(--font)}
   background:var(--panel);border-top:1px solid var(--line);border-radius:14px 14px 0 0;
   padding:14px 12px calc(14px + env(safe-area-inset-bottom))}
 .sheet h2{font-size:14px;font-weight:600;margin-bottom:10px}
-.grid{display:grid;grid-template-columns:repeat(13,1fr);gap:4px}
-.pk{aspect-ratio:.68;min-height:50px;border:1px solid rgba(0,0,0,.3);background:#EEF1F4;
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:9px}
+.pk{height:52px;border:1px solid rgba(0,0,0,.3);background:#EEF1F4;
   border-radius:4px;font-size:15px;font-weight:800;padding:0;
   display:flex;align-items:center;justify-content:center;line-height:1}
 .pk.s-s{color:#14181D} .pk.s-h{color:#D63C36} .pk.s-d{color:#2C7BD1} .pk.s-c{color:#1F8A52}
@@ -1842,7 +1844,7 @@ function seatXY(i,n,hero,rx,ry){
   const off=((i-hero)%n+n)%n, ang=(90+off*360/n)*Math.PI/180;
   return {x:50+rx*Math.cos(ang),y:50+ry*Math.sin(ang)};
 }
-function tableHTML(s,lastBySeat,toActIdx,reveal,winners){
+function tableHTML(s,lastBySeat,toActIdx,reveal,winners,maskEntry){
   const n=s.seats.length, hs=s.cfg.heroSeat;
   let h='<div class="tw"><div class="felt"></div>';
   h+='<div class="street">'+(s.over?'FIN DE LA MAIN':s.street.toUpperCase())+'</div>';
@@ -1855,11 +1857,14 @@ function tableHTML(s,lastBySeat,toActIdx,reveal,winners){
    +'" fill="rgba(255,255,255,.07)"/></svg></div>';
   s.seats.forEach((p,i)=>{
     const q=seatXY(i,n,hs,43,40);
-    const shown=p.hero&&p.cards?p.cards:(reveal&&reveal[i])?reveal[i]:null;
+    const masked=p.hero&&maskEntry&&MASK;   // saisie seulement, jamais replay/résultat
+    const shown=!masked&&p.hero&&p.cards?p.cards:(reveal&&reveal[i])?reveal[i]:null;
     h+='<div class="seat'+(p.hero?' hero':'')+(i===toActIdx?' act':'')+(p.active?'':' out')
       +((winners&&winners.includes(i))?' win':'')
       +'" data-i="'+i+'" style="left:'+q.x+'%;top:'+q.y+'%"><div class="hand">'
-      +(shown?shown.map(c=>card(c,'c-sm')).join(''):p.active?back_('c-xs')+back_('c-xs'):'')
+      +(shown?shown.map(c=>card(c,'c-sm')).join('')
+        :masked?back_('c-xs')+back_('c-xs')+'<span class="eyeoff" title="cartes masquées">\uD83D\uDE48</span>'
+        :p.active?back_('c-xs')+back_('c-xs'):'')
       +'</div>'+(p.hero?'<div class="youtag">'+CROWN+'</div>':'')
       +'<div class="plate"><div class="nm">'+p.pos+'</div>'
       +'<div class="stk">'+(p.allIn?'TAPIS':fmt(p.stack))+'</div></div></div>';
@@ -1954,14 +1959,17 @@ function usedCards(){
 function pickCards(n,title,cb,minN){
   const used=usedCards(), sel=[], variable=minN!==undefined&&minN<n;
   const mask=document.createElement('div'); mask.className='mask';
-  mask.innerHTML='<div class="sheet"><h2>'+title+'</h2><div class="grid" id="pg"></div>'
+  mask.innerHTML='<div class="sheet"><h2>'+title+'</h2><div id="pg"></div>'
     +(variable?'<div class="acts" style="margin-top:10px">'
       +'<button class="act" id="pk-done">TERMINER</button></div>':'');
   document.body.appendChild(mask);
-  const g=mask.querySelector('#pg');
+  const pg=mask.querySelector('#pg');
   const done=()=>{ mask.remove(); cb(sel); };
   if(variable) mask.querySelector('#pk-done').onclick=done;
-  SUITS.forEach(([su,sym])=>RANKS.forEach(r=>{
+  SUITS.forEach(([su,sym])=>{
+   const g=document.createElement('div');
+   g.className='grid'; pg.appendChild(g);
+   RANKS.forEach(r=>{
     const c=r+su, b=document.createElement('button');
     b.className='pk s-'+su; b.textContent=r+sym; b.disabled=used.includes(c);
     b.onclick=()=>{
@@ -1972,7 +1980,8 @@ function pickCards(n,title,cb,minN){
       if(!variable&&sel.length===n) setTimeout(done,90);
     };
     g.appendChild(b);
-  }));
+   });
+  });
 }
 function startClock(){
   const t0=Date.now();
@@ -2057,7 +2066,7 @@ function viewEntry(){
   store.set('draft',{S:S,memo:captureMemo});    // sauvé à chaque action
   header((cfg.stakes?cfg.stakes+' \u00b7 ':'')+(cfg.tableSize===2?'HU':cfg.tableSize+'-max'),
     {sup:'0:00',close:confirmQuit});
-  let h='<div class="ent">'+tableHTML(S,lastBySeatFrom(S.actions,S.street),S.toAct)+'</div>';
+  let h='<div class="ent">'+tableHTML(S,lastBySeatFrom(S.actions,S.street),S.toAct,null,null,true)+'</div>';
   if(captureMemo&&captureMemo.boardMemo&&captureMemo.boardMemo.length)
     h+='<div class="msg" style="display:flex;gap:8px;align-items:center">'
       +'<span style="font-size:11px;color:var(--dim)">CAPTURE \u2014 BOARD NOTÉ</span>'
@@ -2072,6 +2081,9 @@ function viewEntry(){
   if(heroTurn) h+=noteHTML(pend,true);
   body.innerHTML=h;
   /* toucher un siège = fold/check automatiques jusqu'à lui, annulables en une fois */
+  const hh=body.querySelector('.seat.hero .hand');
+  if(hh){ hh.style.cursor='pointer';
+    hh.onclick=e=>{ e.stopPropagation(); MASK=!MASK; store.set('maskCards',MASK); render(); }; }
   body.querySelectorAll('.seat[data-i]').forEach(el=>{
     const i=+el.dataset.i;
     if(!canSkipTo(S,i)) return;
@@ -2257,6 +2269,7 @@ function push(){ hist.push(JSON.stringify(S)); if(hist.length>60) hist.shift(); 
 function undo(){ if(!hist.length) return; S=JSON.parse(hist.pop()); if(!S.over&&!timer)startClock(); render(); }
 
 let pend={note:'',reasons:[],notePrivate:false};   // note de la décision en cours (héros)
+let MASK=!!store.get('maskCards');   // anti-regards à la table : cartes héros cachées
 let resDraft={winners:[],cards:{},q:'',priv:false};
 function viewResult(){
   header('Résultat',{back:true});
