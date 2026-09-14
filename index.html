@@ -89,7 +89,7 @@ button{font-family:var(--font)}
   color:var(--text);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .body{flex:1;overflow-y:auto;padding:12px 13px 58px}
 .foot{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
-.tabs{display:flex;border-top:1px solid var(--tabline);background:var(--tabbg);
+.tabs{display:flex;overflow-x:hidden;border-top:1px solid var(--tabline);background:var(--tabbg);
   padding-bottom:env(safe-area-inset-bottom)}
 .tab{flex:1;background:none;border:none;border-top:2px solid transparent;color:var(--tabmut);
   padding:9px 0 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
@@ -243,8 +243,10 @@ button{font-family:var(--font)}
 .fh i{display:block;font-style:normal;font-weight:500;font-size:11.5px;color:var(--muted)}
 .fdel{color:var(--raise);border-color:var(--raise-d);font-size:11px;flex:0 0 auto}
 .brg{background:var(--card2);border:1px solid var(--cardline);border-radius:10px;
-  padding:8px;margin:10px 0 12px}
-.brg svg{display:block;width:100%;height:96px}
+  padding:6px;margin:8px 0 9px}
+.brg svg{display:block;width:100%;height:auto}
+.brg .gt{font-family:var(--fm);font-size:7.5px;fill:var(--dim)}
+.brg.empty1{font-size:12px;color:var(--muted);text-align:center;padding:14px 10px}
 .stat .v.g{color:var(--win)} .stat .v.r{color:var(--raise)}
 .av.big{width:64px;height:64px;font-size:22px;border-radius:18px}
 .shlnk{font-family:var(--fm);font-size:11.5px;color:var(--muted);background:var(--panel2);
@@ -706,13 +708,16 @@ function loadSupabase(){
   });
 }
 async function cloudLoad(){
+  /* uid AVANT tout : DB.me n'est renseigné qu'en fin de fonction, et la
+     globale session est la seule source fiable à cet instant */
+  const uid=session&&session.user?session.user.id:null;
   const [pr,hd,rc,cm,fl,ss]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('hands').select('*').order('created_at',{ascending:false}).limit(200),
     sb.from('reactions').select('*'),
     sb.from('comments').select('*').order('created_at',{ascending:true}),
     sb.from('follows').select('*'),
-    session?sb.from('sessions').select('*').eq('user_id',session.user.id)
+    uid?sb.from('sessions').select('*').eq('user_id',uid)
       .order('played_at',{ascending:true}):Promise.resolve({data:[]})
   ]);
   DB.players={}; DB.hands=[]; MY.liked={}; DB.sessions=[];
@@ -1029,7 +1034,7 @@ function renderTabs(){
   const n=unseenCount();
   const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">'
    +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>','SAISIR'],
-    ['activity','\u25C9','NOTIFS'+(n?' ('+n+')':'')],['profile','\u25CF','MON POKER']];
+    ['activity','\u25C9','NOTIFS'+(n?' ('+n+')':'')],['profile','\u25CF','MY<br>POKER']];
   tabs.innerHTML=items.map(([k,ic,l])=>'<button class="tab'+(v===k?' on':'')+(k==='setup'?' add':'')
     +'" data-v="'+k+'"><span class="ic"'+(k==='activity'&&n?' style="color:var(--cyan)"':'')+'>'
     +ic+'</span>'+l+'</button>').join('');
@@ -1520,21 +1525,40 @@ function socialRow(p){
     +SOC_ICONS[k]+'</a>').join('')+'</div>';
 }
 function brGraph(ss){
-  if(ss.length<2) return '';
-  let c=0; const pts=ss.map(x=>(c+=x.cashout-x.buyin));
-  const min=Math.min(0,...pts), max=Math.max(0,...pts), span=(max-min)||1;
-  const W=340,H=110,P=6;
-  const xy=pts.map((v,i)=>((P+i*(W-2*P)/(pts.length-1)).toFixed(1))+','
-    +((H-P-(v-min)*(H-2*P)/span).toFixed(1)));
-  const zero=(H-P-(0-min)*(H-2*P)/span).toFixed(1);
-  return '<div class="brg"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
-    +'<line x1="0" y1="'+zero+'" x2="'+W+'" y2="'+zero+'" stroke="var(--line2)" stroke-dasharray="3 4"/>'
-    +'<polyline points="'+xy.join(' ')+'" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linejoin="round"/>'
+  if(ss.length<2) return '<div class="brg empty1">\uD83D\uDCC8 Le graphe apparaît dès '
+    +'ta 2e session \u2014 une courbe a besoin de deux points.</div>';
+  let c=0; const pts=[0].concat(ss.map(x=>(c+=x.cashout-x.buyin)));
+  const min=Math.min(...pts), max=Math.max(...pts);
+  const pad=(max-min)*0.12||10;
+  const lo=min-pad, hi=max+pad, span=hi-lo;
+  const W=340,H=132,L=42,R=8,T=10,B=20;      // L : place pour l'axe des €
+  const X=i=>L+i*(W-L-R)/(pts.length-1);
+  const Y=v=>T+(hi-v)*(H-T-B)/span;
+  const eur=v=>Math.abs(v)>=1000?(v/1000).toFixed(1).replace('.0','')+'k':Math.round(v);
+  const line=pts.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  const area=line+' '+X(pts.length-1).toFixed(1)+','+Y(lo).toFixed(1)+' '+X(0).toFixed(1)+','+Y(lo).toFixed(1);
+  /* 3 graduations € + repère 0 + n° de sessions en abscisse */
+  const ticks=[hi,(hi+lo)/2,lo].map(v=>
+    '<line x1="'+L+'" y1="'+Y(v).toFixed(1)+'" x2="'+(W-R)+'" y2="'+Y(v).toFixed(1)
+    +'" stroke="var(--line)" stroke-width=".6"/>'
+    +'<text x="'+(L-5)+'" y="'+(Y(v)+3.5).toFixed(1)+'" class="gt" text-anchor="end">'+eur(v)+'</text>').join('');
+  const zero=(lo<0&&hi>0)?'<line x1="'+L+'" y1="'+Y(0).toFixed(1)+'" x2="'+(W-R)+'" y2="'+Y(0).toFixed(1)
+    +'" stroke="var(--dim)" stroke-dasharray="3 3" stroke-width=".9"/>':'';
+  const last=pts[pts.length-1];
+  return '<div class="brg"><svg viewBox="0 0 '+W+' '+H+'">'
+    +ticks+zero
+    +'<polygon points="'+area+'" fill="var(--cyan-i)" opacity=".55"/>'
+    +'<polyline points="'+line+'" fill="none" stroke="var(--cyan)" stroke-width="2.2" '
+    +'stroke-linejoin="round" stroke-linecap="round"/>'
+    +'<circle cx="'+X(pts.length-1).toFixed(1)+'" cy="'+Y(last).toFixed(1)+'" r="3.4" fill="var(--cyan)"/>'
+    +'<text x="'+L+'" y="'+(H-6)+'" class="gt">0</text>'
+    +'<text x="'+(W-R)+'" y="'+(H-6)+'" class="gt" text-anchor="end">'+ss.length+' sessions</text>'
+    +'<text x="'+((L+W-R)/2)+'" y="'+(H-6)+'" class="gt" text-anchor="middle">SESSIONS \u2192</text>'
     +'</svg></div>';
 }
 function viewProfile(id){
   const p=DB.players[id], me=id===DB.me;
-  header(me?'Mon profil':p.name,{back:!me&&stack.length>0});
+  header(me?'My Poker':p.name,{back:!me&&stack.length>0});
   const hands=DB.hands.filter(h=>h.author===id).sort((a,b)=>b.createdAt-a.createdAt);
   const likes=hands.reduce((a,h)=>a+h.likes,0);
   const cmts=hands.reduce((a,h)=>a+h.comments.length,0);
@@ -1733,7 +1757,13 @@ function sessionEditor(sess){
         const r=String(sess.id).startsWith('s')
           ? await sb.from('sessions').insert(payload).select('id').single()
           : await sb.from('sessions').update(payload).eq('id',sess.id);
-        if(r.error){ console.error(r.error); }
+        if(r.error){
+          DB.sessions=DB.sessions.filter(x=>x.id!==sess.id);   // rien de fantôme
+          persistDemo(); render();
+          alert('Session NON enregistrée \u2014 '+r.error.message
+            +(/relation|does not exist|column/i.test(r.error.message)
+              ?'\n\nExécute migration-bankroll.sql dans Supabase.':''));
+        }
         else if(r.data&&r.data.id){ sess.id=r.data.id; persistDemo(); }
       }
     };
