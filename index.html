@@ -242,6 +242,11 @@ button{font-family:var(--font)}
 .fh{min-width:0;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fh i{display:block;font-style:normal;font-weight:500;font-size:11.5px;color:var(--muted)}
 .fdel{color:var(--raise);border-color:var(--raise-d);font-size:11px;flex:0 0 auto}
+.brg{background:var(--card2);border:1px solid var(--cardline);border-radius:10px;
+  padding:8px;margin:10px 0 12px}
+.brg svg{display:block;width:100%;height:96px}
+.stat .v.g{color:var(--win)} .stat .v.r{color:var(--raise)}
+.av.big{width:64px;height:64px;font-size:22px;border-radius:18px}
 .shlnk{font-family:var(--fm);font-size:11.5px;color:var(--muted);background:var(--panel2);
   border:1px solid var(--line);border-radius:7px;padding:9px 10px;margin-bottom:12px;
   word-break:break-all}
@@ -294,6 +299,11 @@ button{font-family:var(--font)}
 /* En saisie, la table partage l'écran avec sizings + actions : plus compacte,
    et encore un cran de moins sur les petits téléphones. Le replay garde 390px. */
 .ent .tw{height:clamp(212px,calc(100dvh - 500px),308px);margin:0 0 40px}
+/* iOS Safari : au premier affichage la barre d'adresse est grande — svh est la
+   hauteur GARANTIE dès le premier rendu, avant tout glissement */
+@supports (height:100svh){
+  .ent .tw{height:clamp(212px,calc(100svh - 500px),308px)}
+}
 .ent .seat{width:76px}
 .ent .potline{margin-top:6px}
 @media (max-height:740px){ .ent .tw{margin-bottom:44px}
@@ -696,19 +706,24 @@ function loadSupabase(){
   });
 }
 async function cloudLoad(){
-  const [pr,hd,rc,cm,fl]=await Promise.all([
+  const [pr,hd,rc,cm,fl,ss]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('hands').select('*').order('created_at',{ascending:false}).limit(200),
     sb.from('reactions').select('*'),
     sb.from('comments').select('*').order('created_at',{ascending:true}),
-    sb.from('follows').select('*')
+    sb.from('follows').select('*'),
+    session?sb.from('sessions').select('*').eq('user_id',session.user.id)
+      .order('played_at',{ascending:true}):Promise.resolve({data:[]})
   ]);
-  DB.players={}; DB.hands=[]; MY.liked={};
+  DB.players={}; DB.hands=[]; MY.liked={}; DB.sessions=[];
   (pr.data||[]).forEach(p=>DB.players[p.id]={id:p.id,handle:p.handle,
     name:p.name||p.handle,stakes:p.stakes||'',bio:p.bio||'',
-    socials:p.socials||{},following:[]});
+    socials:p.socials||{},shareBr:!!p.share_br,following:[]});
   (fl.data||[]).forEach(f=>{ const x=DB.players[f.follower_id];
     if(x) x.following.push(f.followed_id); });
+  DB.sessions=(ss.data||[]).map(r=>({id:r.id,date:r.played_at,format:r.format,
+    venue:r.venue,stakes:r.stakes||'',buyin:+r.buyin,cashout:+r.cashout,
+    minutes:r.minutes||null,note:r.note||''}));
   const likes={},dislikes={},cms={};
   (rc.data||[]).forEach(x=>{
     const t=x.kind==='like'?likes:dislikes;
@@ -860,6 +875,7 @@ let captureMemo=null;                     // capture en cours de complétion
 /* En mode démo, ce que TU fais survit au rechargement de la page. */
 function restoreLocal(){
   (store.get('localHands')||[]).forEach(h=>{ if(!DB.hands.find(x=>x.id===h.id)) DB.hands.push(h); });
+  DB.sessions=store.get('sessions')||[];
   Object.assign(MY.liked, store.get('liked')||{});
   const fl=store.get('following'); if(fl&&DB.players[DB.me]) DB.players[DB.me].following=fl;
   const pe=store.get('profileEdit'); if(pe&&DB.players[DB.me]) Object.assign(DB.players[DB.me],pe);
@@ -870,6 +886,7 @@ function persistDemo(){
   store.set('liked',MY.liked);
   if(DB.players[DB.me]) store.set('following',DB.players[DB.me].following);
   store.set('localHands',DB.hands.filter(h=>String(h.id).startsWith('u')));
+  store.set('sessions',DB.sessions||[]);
 }
 
 /* Limites proposées à la saisie, par format. Libellé libre stocké tel quel. */
@@ -992,6 +1009,7 @@ function render(){
   if(v==='home') viewHome();
   else if(v==='week') viewWeek();
   else if(v==='auth') viewAuth();
+  else if(v==='account'){ if(!DB.me) viewAuth(); else viewAccount(); }
   else if(v==='activity') viewActivity();
   else if(v==='profile'){
     const id=route.id||DB.me;
@@ -1011,7 +1029,7 @@ function renderTabs(){
   const n=unseenCount();
   const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">'
    +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>','SAISIR'],
-    ['activity','\u25C9','NOTIFS'+(n?' ('+n+')':'')],['profile','\u25CF','PROFIL']];
+    ['activity','\u25C9','NOTIFS'+(n?' ('+n+')':'')],['profile','\u25CF','MON POKER']];
   tabs.innerHTML=items.map(([k,ic,l])=>'<button class="tab'+(v===k?' on':'')+(k==='setup'?' add':'')
     +'" data-v="'+k+'"><span class="ic"'+(k==='activity'&&n?' style="color:var(--cyan)"':'')+'>'
     +ic+'</span>'+l+'</button>').join('');
@@ -1020,6 +1038,9 @@ function renderTabs(){
     else tabTo(b.dataset.v);
   });
 }
+const PERS='<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">'
+ +'<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/>'
+ +'<path d="M4.5 20c1.6-3.6 4.3-5.2 7.5-5.2s5.9 1.6 7.5 5.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 function header(title,opts){
   opts=opts||{};
   hdr.innerHTML=(opts.back?'<button class="ib" id="bk">\u2039</button>':'')
@@ -1030,9 +1051,11 @@ function header(title,opts){
   if(!opts.close&&!opts.sup){
     hdr.insertAdjacentHTML('beforeend',
       '<button class="ib" id="th" style="margin-left:auto" aria-label="changer de thème">'
-      +(document.body.classList.contains('light')?'\u263E':'\u2600')+'</button>');
+      +(document.body.classList.contains('light')?'\u263E':'\u2600')+'</button>'
+      +'<button class="ib" id="acc" aria-label="mon compte">'+PERS+'</button>');
     $('th').onclick=()=>{
       applyTheme(document.body.classList.contains('light')?'dark':'light'); render(); };
+    $('acc').onclick=()=>go('account');
   }
   /* le logo est un bouton retour-accueil ; en pleine saisie, il passe par la
      confirmation d'abandon au lieu de jeter la main en cours */
@@ -1467,7 +1490,7 @@ function viewWeek(){
 /* Sur SON profil : trois traces. Les mains publiées, celles où on a réagi,
    celles où on a commenté. En ligne comme en démo, la réaction vient de
    MY.liked et les commentaires de la main elle-même — aucune table en plus. */
-let profTab='pub';
+let profTab='bank';
 function reactedHands(){
   return DB.hands.filter(h=>MY.liked[h.id])
     .sort((a,b)=>b.createdAt-a.createdAt);
@@ -1496,6 +1519,19 @@ function socialRow(p){
     +'" target="_blank" rel="noopener noreferrer" aria-label="'+k+'">'
     +SOC_ICONS[k]+'</a>').join('')+'</div>';
 }
+function brGraph(ss){
+  if(ss.length<2) return '';
+  let c=0; const pts=ss.map(x=>(c+=x.cashout-x.buyin));
+  const min=Math.min(0,...pts), max=Math.max(0,...pts), span=(max-min)||1;
+  const W=340,H=110,P=6;
+  const xy=pts.map((v,i)=>((P+i*(W-2*P)/(pts.length-1)).toFixed(1))+','
+    +((H-P-(v-min)*(H-2*P)/span).toFixed(1)));
+  const zero=(H-P-(0-min)*(H-2*P)/span).toFixed(1);
+  return '<div class="brg"><svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
+    +'<line x1="0" y1="'+zero+'" x2="'+W+'" y2="'+zero+'" stroke="var(--line2)" stroke-dasharray="3 4"/>'
+    +'<polyline points="'+xy.join(' ')+'" fill="none" stroke="var(--cyan)" stroke-width="2.2" stroke-linejoin="round"/>'
+    +'</svg></div>';
+}
 function viewProfile(id){
   const p=DB.players[id], me=id===DB.me;
   header(me?'Mon profil':p.name,{back:!me&&stack.length>0});
@@ -1516,8 +1552,9 @@ function viewProfile(id){
    +(me?'':'<button class="btn full'+(DB.players[DB.me].following.includes(id)?' on':'')+'" id="fol">'
       +(DB.players[DB.me].following.includes(id)?'Abonné':'S\'abonner')+'</button>')
    +'<div class="rule"></div>'
-   +(me?'<div class="rowbar" id="p-tab">'
-      +[['pub','Publiées \u00b7 '+hands.length],
+   +(me?'<div class="rowbar mini" id="p-tab">'
+      +[['bank','BANKROLL'],
+        ['pub','Publiées \u00b7 '+hands.length],
         ['lik','Likées \u00b7 '+reactedHands().length],
         ['com','Commentées \u00b7 '+commentedHands(id).length]]
       .map(([v,l])=>'<button class="seg'+(profTab===v?' on':'')+'" data-v="'+v+'">'+l+'</button>').join('')
@@ -1530,6 +1567,27 @@ function viewProfile(id){
         +(hands.length?'<div class="hlist">'+hands.map(handRow).join('')+'</div>'
           :'<div class="empty"><div class="big">Aucune main publiée</div>'
            +'<p>Saisis ta première main depuis l\'onglet +.</p></div>');
+    }
+    if(profTab==='bank'){
+      const ss=(DB.sessions||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+      const total=ss.reduce((t,x)=>t+(x.cashout-x.buyin),0);
+      const mins=ss.reduce((t,x)=>t+(x.minutes||0),0);
+      const eh=mins?total/(mins/60):null;
+      const eur=v=>(v>0?'+':'')+(Math.round(v*100)/100).toLocaleString('fr-FR')+' \u20AC';
+      return '<div class="stats" style="margin-top:0">'
+        +'<div class="stat"><div class="v '+(total>=0?'g':'r')+'">'+eur(total)+'</div><div class="k">RÉSULTAT</div></div>'
+        +'<div class="stat"><div class="v">'+ss.length+'</div><div class="k">SESSIONS</div></div>'
+        +'<div class="stat"><div class="v">'+(eh===null?'\u2014':eur(eh))+'</div><div class="k">PAR HEURE</div></div></div>'
+        +brGraph(ss)
+        +'<button class="btn full pri" id="bk-add">+ AJOUTER UNE SESSION</button>'
+        +(ss.length?'<div class="hlist" style="margin-top:12px">'+ss.slice().reverse().map(x=>
+          '<button class="hrow" data-sess="'+x.id+'">'
+          +'<span class="hd">'+x.date.slice(5).split('-').reverse().join('/')+'</span>'
+          +'<span class="ht">'+(x.format==='cash'?'CG':'MTT')+' '+(x.stakes||'')+' \u00b7 '+(x.venue==='live'?'Live':'Online')+'</span>'
+          +'<span class="bdg '+((x.cashout-x.buyin)>=0?'win':'lose')+'">'+eur(x.cashout-x.buyin)+'</span></button>').join('')+'</div>'
+         :'<div class="empty" style="padding:18px 0"><p>Saisis ta première session \u2014 20 secondes.</p></div>')
+        +'<label class="privrow" style="margin-top:16px"><input type="checkbox" id="bk-share"'+(p.shareBr?' checked':'')+'>'
+        +'<span><b>Partager ma bankroll</b> \u2014 le graphe et le total deviennent visibles sur ton profil public. Déclaratif : c\'est toi qui saisis.</span></label>';
     }
     if(profTab==='lik'){
       const hs=reactedHands();
@@ -1550,17 +1608,32 @@ function viewProfile(id){
   }
   const pt=$('p-tab');
   if(pt) [...pt.children].forEach(b=>b.onclick=()=>{profTab=b.dataset.v;render();});
+  const ba=$('bk-add'); if(ba) ba.onclick=()=>sessionEditor(null);
+  body.querySelectorAll('[data-sess]').forEach(b=>b.onclick=()=>
+    sessionEditor((DB.sessions||[]).find(x=>x.id===b.dataset.sess)));
+  const bs=$('bk-share');
+  if(bs) bs.onchange=async e=>{
+    p.shareBr=e.target.checked;
+    if(LIVE){ const r=await sb.from('profiles').update({share_br:p.shareBr}).eq('id',id);
+      if(r.error){ p.shareBr=!p.shareBr; e.target.checked=p.shareBr; console.error(r.error); } }
+  };
   const f=$('fol'); if(f) f.onclick=()=>{toggleFollow(id);render();};
+  if(!me&&p.shareBr){
+    body.insertAdjacentHTML('beforeend','<div class="rule"></div>'
+      +'<span class="lbl">SA BANKROLL (déclarée par le joueur)</span><div id="obr"></div>');
+    const fill=ss=>{
+      const total=ss.reduce((t,x)=>t+(+x.cashout-+x.buyin),0);
+      $('obr').innerHTML=(ss.length>=2?brGraph(ss):'')
+        +'<div class="msg">Résultat déclaré : <b>'+(total>0?'+':'')
+        +(Math.round(total*100)/100).toLocaleString('fr-FR')+' \u20AC</b> sur '+ss.length+' session'+(ss.length>1?'s':'')+'.</div>';
+    };
+    if(LIVE){
+      sb.from('sessions').select('*').eq('user_id',id).order('played_at',{ascending:true})
+        .then(r=>fill((r.data||[]).map(x=>({date:x.played_at,buyin:+x.buyin,cashout:+x.cashout}))));
+    } else fill([]);
+  }
   $('st-fers').onclick=()=>openFollowSheet('fers',id);
   $('st-fing').onclick=()=>openFollowSheet('fing',id);
-  if(me){
-    body.insertAdjacentHTML('beforeend',
-      '<div class="rule"></div><button class="btn full" id="pe">MODIFIER LE PROFIL</button>'
-      +(LIVE?'<button class="btn full" id="lo" style="margin-top:8px">SE DÉCONNECTER</button>':''));
-    $('pe').onclick=()=>editProfile(id);
-    const lo=$('lo');
-    if(lo) lo.onclick=async()=>{ await sb.auth.signOut(); stack=[]; route={v:'home'}; };
-  }
   if(me&&!LIVE){
     body.insertAdjacentHTML('afterbegin',
       '<div class="msg" style="margin-bottom:12px"><b>Mode démo</b> \u2014 profil local. '
@@ -1589,6 +1662,102 @@ function openFollowSheet(kind,id){
   m.onclick=e=>{ if(e.target===m) m.remove(); };
   m.querySelectorAll('.fgo').forEach(b=>b.onclick=()=>{ m.remove(); go('profile',{id:b.dataset.p}); });
   m.querySelectorAll('.fdel').forEach(b=>b.onclick=()=>{ toggleFollow(b.dataset.u); m.remove(); render(); });
+}
+const STK_ON=['NL10','NL25','NL50','NL100','NL200','NL500'];
+const STK_LV=['1/2','1/3','2/5','5/10'];
+function sessionEditor(sess){
+  const e=sess?{...sess}:{format:'cash',venue:'online',stakes:'',buyin:'',cashout:'',
+    minutes:null,date:new Date().toISOString().slice(0,10),note:''};
+  const m=document.createElement('div'); m.className='mask';
+  const seg=(id,pairs,cur)=>'<div class="rowbar mini" id="'+id+'">'+pairs.map(([v,l])=>
+    '<button class="seg'+(cur===v?' on':'')+'" data-v="'+v+'">'+l+'</button>').join('')+'</div>';
+  const draw=()=>{
+    const stks=e.venue==='live'?STK_LV:STK_ON;
+    m.innerHTML='<div class="sheet"><h2>'+(sess?'Modifier la session':'Nouvelle session')+'</h2>'
+     +seg('se-f',[['cash','CASH GAME'],['mtt','TOURNOI']],e.format)
+     +seg('se-v',[['online','ONLINE'],['live','LIVE']],e.venue)
+     +'<div class="field"><span class="lbl">'+(e.format==='cash'?'LIMITE':'BUY-IN / FORMAT')+'</span>'
+     +'<div class="chips mini">'+stks.map(x=>'<button class="chip rsn'+(e.stakes===x?' on':'')+'" data-stk="'+x+'">'+x+'</button>').join('')
+     +'<input class="cbox" id="se-stk" placeholder="autre\u2026" maxlength="30" value="'+esc(e.stakes)+'" style="width:110px;padding:7px 9px"></div></div>'
+     +'<div class="field" style="display:flex;gap:8px">'
+     +'<span style="flex:1"><span class="lbl">'+(e.format==='cash'?'BUY-IN TOTAL \u20AC':'BUY-IN (recaves incl.) \u20AC')+'</span>'
+     +'<input class="cbox" id="se-bi" type="number" inputmode="decimal" min="0" step="0.5" value="'+e.buyin+'"></span>'
+     +'<span style="flex:1"><span class="lbl">'+(e.format==='cash'?'CASH-OUT \u20AC':'GAINS \u20AC')+'</span>'
+     +'<input class="cbox" id="se-co" type="number" inputmode="decimal" min="0" step="0.5" value="'+e.cashout+'"></span></div>'
+     +'<div class="field"><span class="lbl">DURÉE (OPTIONNEL)</span><div class="chips mini" id="se-du">'
+     +[60,120,240,360,480].map(x=>'<button class="chip rsn'+(e.minutes===x?' on':'')+'" data-min="'+x+'">'+(x/60)+'h</button>').join('')+'</div></div>'
+     +'<div class="field"><span class="lbl">DATE</span>'
+     +'<input class="cbox" id="se-dt" type="date" value="'+e.date+'"></div>'
+     +'<div class="field"><span class="lbl">NOTE (OPTIONNEL)</span>'
+     +'<input class="cbox" id="se-nt" maxlength="140" placeholder="table agressive, tilt évité\u2026" value="'+esc(e.note)+'"></div>'
+     +'<div id="se-err" class="msg err" style="display:none;margin-bottom:8px"></div>'
+     +'<div style="display:flex;gap:8px">'
+     +(sess?'<button class="btn" id="se-del" style="flex:1;color:var(--raise);border-color:var(--raise-d)">SUPPRIMER</button>':'')
+     +'<button class="btn full pri" id="se-ok" style="flex:2">ENREGISTRER</button></div></div>';
+    bindAll();
+  };
+  const bindAll=()=>{
+    [...m.querySelector('#se-f').children].forEach(b=>b.onclick=()=>{e.format=b.dataset.v;e.stakes='';draw();});
+    [...m.querySelector('#se-v').children].forEach(b=>b.onclick=()=>{e.venue=b.dataset.v;e.stakes='';draw();});
+    m.querySelectorAll('[data-stk]').forEach(b=>b.onclick=()=>{e.stakes=b.dataset.stk;draw();});
+    m.querySelector('#se-stk').oninput=ev=>{e.stakes=ev.target.value;};
+    m.querySelectorAll('[data-min]').forEach(b=>b.onclick=()=>{
+      e.minutes=e.minutes===+b.dataset.min?null:+b.dataset.min;draw();});
+    m.querySelector('#se-bi').oninput=ev=>{e.buyin=ev.target.value;};
+    m.querySelector('#se-co').oninput=ev=>{e.cashout=ev.target.value;};
+    m.querySelector('#se-dt').oninput=ev=>{e.date=ev.target.value;};
+    m.querySelector('#se-nt').oninput=ev=>{e.note=ev.target.value;};
+    const del=m.querySelector('#se-del');
+    if(del) del.onclick=async()=>{
+      m.remove();
+      DB.sessions=DB.sessions.filter(x=>x.id!==sess.id); persistDemo(); render();
+      if(LIVE){ const r=await sb.from('sessions').delete().eq('id',sess.id);
+        if(r.error) console.error(r.error); }
+    };
+    m.querySelector('#se-ok').onclick=async()=>{
+      const bi=parseFloat(e.buyin), co=parseFloat(e.cashout);
+      const err=m.querySelector('#se-err');
+      if(!isFinite(bi)||bi<0||!isFinite(co)||co<0||!e.date){
+        err.style.display='block';
+        err.textContent='Buy-in, cash-out (0 accepté) et date sont requis.'; return; }
+      const row={date:e.date,format:e.format,venue:e.venue,
+        stakes:(e.stakes||'').trim().slice(0,30),buyin:bi,cashout:co,
+        minutes:e.minutes,note:(e.note||'').trim().slice(0,140)};
+      m.remove();
+      if(sess){ Object.assign(sess,row); } 
+      else { sess={id:'s'+Date.now(),...row}; (DB.sessions=DB.sessions||[]).push(sess); }
+      persistDemo(); render();
+      if(LIVE){
+        const payload={user_id:DB.me,played_at:row.date,format:row.format,venue:row.venue,
+          stakes:row.stakes,buyin:row.buyin,cashout:row.cashout,minutes:row.minutes,note:row.note};
+        const r=String(sess.id).startsWith('s')
+          ? await sb.from('sessions').insert(payload).select('id').single()
+          : await sb.from('sessions').update(payload).eq('id',sess.id);
+        if(r.error){ console.error(r.error); }
+        else if(r.data&&r.data.id){ sess.id=r.data.id; persistDemo(); }
+      }
+    };
+  };
+  document.body.appendChild(m);
+  m.onclick=ev=>{ if(ev.target===m) m.remove(); };
+  draw();
+}
+function viewAccount(){
+  header('Compte',{back:true});
+  const p=DB.players[DB.me];
+  body.innerHTML='<div class="pcard" style="text-align:center">'
+   +'<div class="av big" style="margin:0 auto 10px">'+initials(DB.me)+'</div>'
+   +'<div style="font-weight:800;font-size:17px">@'+p.handle+'</div>'
+   +'<div style="color:var(--muted);font-size:13px;margin-top:2px">'+p.name+'</div>'
+   +socialRow(p)+'</div>'
+   +'<button class="btn full" id="pe" style="margin-top:14px">MODIFIER LE PROFIL</button>'
+   +(LIVE?'<button class="btn full" id="lo" style="margin-top:8px">SE DÉCONNECTER</button>':'')
+   +'<div class="rule"></div>'
+   +'<button class="btn full" id="mp">\u25CF VOIR MON POKER</button>';
+  $('pe').onclick=()=>editProfile(DB.me);
+  const lo=$('lo');
+  if(lo) lo.onclick=async()=>{ await sb.auth.signOut(); stack=[]; route={v:'home'}; };
+  $('mp').onclick=()=>{ stack=[]; route={v:'profile'}; render(); };
 }
 function editProfile(id){
   const p=DB.players[id];
@@ -2211,6 +2380,29 @@ function bindFoot(){
       foot.querySelectorAll('.sz').forEach(x=>x.classList.remove('on'));
       $('whv').textContent=fmt(pendingAmt)+' bb'
         +(so.preflop?'':' \u00b7 '+wh.value+'%');
+    };
+    /* tap sur le chiffre = clavier : montant exact en bb, à n'importe quel tour */
+    const wv=$('whv');
+    wv.style.cursor='pointer'; wv.title='taper un montant exact';
+    wv.onclick=()=>{
+      if(wv.querySelector('input')) return;
+      const lo=so.isBet?0.5:so.minTo, hi=so.max;
+      const cur=pendingAmt||lo;
+      wv.innerHTML='<input type="number" inputmode="decimal" step="0.1" '
+        +'min="'+lo+'" max="'+hi+'" value="'+cur+'" id="whx" '
+        +'style="width:76px;font:inherit;color:inherit;background:var(--panel2);'
+        +'border:1px solid var(--cyan);border-radius:5px;padding:2px 6px"> bb';
+      const inp=$('whx'); inp.focus(); inp.select();
+      const apply=()=>{
+        let v=parseFloat(inp.value);
+        if(!isFinite(v)){ render(); return; }
+        v=Math.min(hi,Math.max(lo,round2(v)));
+        pendingAmt=v; pendingSize=null;
+        foot.querySelectorAll('.sz').forEach(x=>x.classList.remove('on'));
+        wv.textContent=fmt(v)+' bb';
+      };
+      inp.onkeydown=e=>{ if(e.key==='Enter') inp.blur(); };
+      inp.onblur=apply;
     };
   }
   foot.querySelectorAll('.sz').forEach(b=>b.onclick=()=>{
