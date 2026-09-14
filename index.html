@@ -728,7 +728,7 @@ async function cloudLoad(){
     if(x) x.following.push(f.followed_id); });
   DB.sessions=(ss.data||[]).map(r=>({id:r.id,date:r.played_at,format:r.format,
     venue:r.venue,stakes:r.stakes||'',buyin:+r.buyin,cashout:+r.cashout,
-    minutes:r.minutes||null,note:r.note||''}));
+    minutes:r.minutes||null,venueName:r.venue_name||'',note:r.note||''}));
   const likes={},dislikes={},cms={};
   (rc.data||[]).forEach(x=>{
     const t=x.kind==='like'?likes:dislikes;
@@ -1191,7 +1191,10 @@ function handCard(h){
     +'</div></div>';
 }
 function bindCards(){
-  body.querySelectorAll('.hc,.hrow').forEach(el=>el.onclick=()=>go('hand',{id:el.dataset.h}));
+  body.querySelectorAll('.hc,.hrow').forEach(el=>{
+    if(!el.dataset.h) return;   // les lignes de session ont leur propre liant
+    el.onclick=()=>go('hand',{id:el.dataset.h});
+  });
   body.querySelectorAll('.plock').forEach(b=>b.onclick=e=>{
     e.stopPropagation(); togglePrivate(b.dataset.pl); });
   body.querySelectorAll('.pdel').forEach(b=>b.onclick=e=>{
@@ -1601,13 +1604,16 @@ function viewProfile(id){
       return '<div class="stats" style="margin-top:0">'
         +'<div class="stat"><div class="v '+(total>=0?'g':'r')+'">'+eur(total)+'</div><div class="k">RÉSULTAT</div></div>'
         +'<div class="stat"><div class="v">'+ss.length+'</div><div class="k">SESSIONS</div></div>'
-        +'<div class="stat"><div class="v">'+(eh===null?'\u2014':eur(eh))+'</div><div class="k">PAR HEURE</div></div></div>'
+        +'<div class="stat"><div class="v">'+(eh===null?'\u2014':eur(eh))+'</div>'
+        +'<div class="k">PAR HEURE'+(mins?' \u00b7 '+(Math.round(mins/6)/10)+'H':'')+'</div></div></div>'
         +brGraph(ss)
         +'<button class="btn full pri" id="bk-add">+ AJOUTER UNE SESSION</button>'
         +(ss.length?'<div class="hlist" style="margin-top:12px">'+ss.slice().reverse().map(x=>
           '<button class="hrow" data-sess="'+x.id+'">'
           +'<span class="hd">'+x.date.slice(5).split('-').reverse().join('/')+'</span>'
-          +'<span class="ht">'+(x.format==='cash'?'CG':'MTT')+' '+(x.stakes||'')+' \u00b7 '+(x.venue==='live'?'Live':'Online')+'</span>'
+          +'<span class="ht">'+(x.format==='cash'?'CG':'MTT')+' '+(x.stakes||'')
+          +' \u00b7 '+(x.venueName||(x.venue==='live'?'Live':'Online'))
+          +(x.minutes?' \u00b7 '+(Math.round(x.minutes/6)/10)+'h':'')+'</span>'
           +'<span class="bdg '+((x.cashout-x.buyin)>=0?'win':'lose')+'">'+eur(x.cashout-x.buyin)+'</span></button>').join('')+'</div>'
          :'<div class="empty" style="padding:18px 0"><p>Saisis ta première session \u2014 20 secondes.</p></div>')
         +'<label class="privrow" style="margin-top:16px"><input type="checkbox" id="bk-share"'+(p.shareBr?' checked':'')+'>'
@@ -1687,11 +1693,14 @@ function openFollowSheet(kind,id){
   m.querySelectorAll('.fgo').forEach(b=>b.onclick=()=>{ m.remove(); go('profile',{id:b.dataset.p}); });
   m.querySelectorAll('.fdel').forEach(b=>b.onclick=()=>{ toggleFollow(b.dataset.u); m.remove(); render(); });
 }
+const VENUES=['Club Circus Paris','Club Pierre Charron','Barrière Enghien','Barrière Toulouse',
+  'Casino Aix-en-Provence','Casino Bruxelles','Partouche Forges','Home game'];
+const SITES=['Winamax','PokerStars','Unibet','PMU Poker','partypoker','GGPoker','Betclic'];
 const STK_ON=['NL10','NL25','NL50','NL100','NL200','NL500'];
 const STK_LV=['1/2','1/3','2/5','5/10'];
 function sessionEditor(sess){
   const e=sess?{...sess}:{format:'cash',venue:'online',stakes:'',buyin:'',cashout:'',
-    minutes:null,date:new Date().toISOString().slice(0,10),note:''};
+    minutes:null,venueName:'',date:new Date().toISOString().slice(0,10),note:''};
   const m=document.createElement('div'); m.className='mask';
   const seg=(id,pairs,cur)=>'<div class="rowbar mini" id="'+id+'">'+pairs.map(([v,l])=>
     '<button class="seg'+(cur===v?' on':'')+'" data-v="'+v+'">'+l+'</button>').join('')+'</div>';
@@ -1708,8 +1717,21 @@ function sessionEditor(sess){
      +'<input class="cbox" id="se-bi" type="number" inputmode="decimal" min="0" step="0.5" value="'+e.buyin+'"></span>'
      +'<span style="flex:1"><span class="lbl">'+(e.format==='cash'?'CASH-OUT \u20AC':'GAINS \u20AC')+'</span>'
      +'<input class="cbox" id="se-co" type="number" inputmode="decimal" min="0" step="0.5" value="'+e.cashout+'"></span></div>'
-     +'<div class="field"><span class="lbl">DURÉE (OPTIONNEL)</span><div class="chips mini" id="se-du">'
-     +[60,120,240,360,480].map(x=>'<button class="chip rsn'+(e.minutes===x?' on':'')+'" data-min="'+x+'">'+(x/60)+'h</button>').join('')+'</div></div>'
+     +'<div class="field"><span class="lbl">DURÉE RÉELLE \u2014 sert au \u20AC/heure</span>'
+     +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">'
+     +'<input class="cbox" id="se-h" type="number" inputmode="numeric" min="0" max="33" '
+     +'placeholder="h" value="'+(e.minutes?Math.floor(e.minutes/60):'')+'" style="width:72px">'
+     +'<span style="color:var(--muted);font-size:12px">h</span>'
+     +'<input class="cbox" id="se-m" type="number" inputmode="numeric" min="0" max="59" step="5" '
+     +'placeholder="min" value="'+(e.minutes?e.minutes%60:'')+'" style="width:82px">'
+     +'<span style="color:var(--muted);font-size:12px">min</span></div>'
+     +'<div class="chips mini" id="se-du">'
+     +[60,120,180,240,300,360,480].map(x=>'<button class="chip rsn'+(e.minutes===x?' on':'')+'" data-min="'+x+'">'+(x/60)+'h</button>').join('')+'</div></div>'
+     +'<div class="field"><span class="lbl">'+(e.venue==='live'?'LIEU':'SITE / PLATEFORME')+'</span>'
+     +'<div class="chips mini">'+(e.venue==='live'?VENUES:SITES).slice(0,7).map(x=>
+        '<button class="chip rsn'+(e.venueName===x?' on':'')+'" data-vn="'+x+'">'+x+'</button>').join('')+'</div>'
+     +'<input class="cbox" id="se-vn" maxlength="60" style="margin-top:7px" placeholder="'
+     +(e.venue==='live'?'autre club\u2026':'autre site\u2026')+'" value="'+esc(e.venueName||'')+'"></div>'
      +'<div class="field"><span class="lbl">DATE</span>'
      +'<input class="cbox" id="se-dt" type="date" value="'+e.date+'"></div>'
      +'<div class="field"><span class="lbl">NOTE (OPTIONNEL)</span>'
@@ -1722,11 +1744,26 @@ function sessionEditor(sess){
   };
   const bindAll=()=>{
     [...m.querySelector('#se-f').children].forEach(b=>b.onclick=()=>{e.format=b.dataset.v;e.stakes='';draw();});
-    [...m.querySelector('#se-v').children].forEach(b=>b.onclick=()=>{e.venue=b.dataset.v;e.stakes='';draw();});
+    [...m.querySelector('#se-v').children].forEach(b=>b.onclick=()=>{
+      e.venue=b.dataset.v; e.stakes=''; e.venueName=''; draw();});
     m.querySelectorAll('[data-stk]').forEach(b=>b.onclick=()=>{e.stakes=b.dataset.stk;draw();});
     m.querySelector('#se-stk').oninput=ev=>{e.stakes=ev.target.value;};
     m.querySelectorAll('[data-min]').forEach(b=>b.onclick=()=>{
       e.minutes=e.minutes===+b.dataset.min?null:+b.dataset.min;draw();});
+    const rdDur=()=>{
+      const h=parseInt(m.querySelector('#se-h').value||'0',10);
+      const mi=parseInt(m.querySelector('#se-m').value||'0',10);
+      const tot=(isFinite(h)?h:0)*60+(isFinite(mi)?mi:0);
+      e.minutes=tot>0?Math.min(2000,tot):null;
+      m.querySelectorAll('[data-min]').forEach(b=>
+        b.classList.toggle('on',e.minutes===+b.dataset.min));
+    };
+    m.querySelector('#se-h').oninput=rdDur;
+    m.querySelector('#se-m').oninput=rdDur;
+    const vn=m.querySelector('#se-vn');
+    if(vn) vn.oninput=ev=>{e.venueName=ev.target.value;};
+    m.querySelectorAll('[data-vn]').forEach(b=>b.onclick=()=>{
+      e.venueName=e.venueName===b.dataset.vn?'':b.dataset.vn; draw();});
     m.querySelector('#se-bi').oninput=ev=>{e.buyin=ev.target.value;};
     m.querySelector('#se-co').oninput=ev=>{e.cashout=ev.target.value;};
     m.querySelector('#se-dt').oninput=ev=>{e.date=ev.target.value;};
@@ -1746,14 +1783,17 @@ function sessionEditor(sess){
         err.textContent='Buy-in, cash-out (0 accepté) et date sont requis.'; return; }
       const row={date:e.date,format:e.format,venue:e.venue,
         stakes:(e.stakes||'').trim().slice(0,30),buyin:bi,cashout:co,
-        minutes:e.minutes,note:(e.note||'').trim().slice(0,140)};
+        minutes:e.minutes,
+        venueName:(e.venueName||'').trim().slice(0,60),
+        note:(e.note||'').trim().slice(0,140)};
       m.remove();
       if(sess){ Object.assign(sess,row); } 
       else { sess={id:'s'+Date.now(),...row}; (DB.sessions=DB.sessions||[]).push(sess); }
       persistDemo(); render();
       if(LIVE){
         const payload={user_id:DB.me,played_at:row.date,format:row.format,venue:row.venue,
-          stakes:row.stakes,buyin:row.buyin,cashout:row.cashout,minutes:row.minutes,note:row.note};
+          stakes:row.stakes,buyin:row.buyin,cashout:row.cashout,minutes:row.minutes,
+          venue_name:row.venueName,note:row.note};
         const r=String(sess.id).startsWith('s')
           ? await sb.from('sessions').insert(payload).select('id').single()
           : await sb.from('sessions').update(payload).eq('id',sess.id);
