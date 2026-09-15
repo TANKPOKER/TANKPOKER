@@ -91,9 +91,11 @@ button{font-family:var(--font)}
 .foot{border-top:1px solid var(--line);background:var(--panel);padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
 .tabs{display:flex;overflow-x:hidden;border-top:1px solid var(--tabline);background:var(--tabbg);
   padding-bottom:env(safe-area-inset-bottom)}
-.tab{flex:1;background:none;border:none;border-top:2px solid transparent;color:var(--tabmut);
-  padding:9px 0 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
-  font-family:var(--fd);font-size:10px;font-weight:700;letter-spacing:.1em;margin-top:-1px}
+.tab{flex:1;min-width:0;background:none;border:none;border-top:2px solid transparent;color:var(--tabmut);
+  padding:9px 0 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+  justify-content:flex-end;gap:4px;height:56px;box-sizing:border-box;
+  font-family:var(--fd);font-size:9.5px;font-weight:700;letter-spacing:.07em;white-space:nowrap;
+  margin-top:-1px}
 .tab .ic{font-size:16px;line-height:1}
 .tab.on{color:#FFFFFF;border-top-color:var(--cyan);background:rgba(255,255,255,.07)}
 .tab.on .ic{color:var(--cyan)}
@@ -1077,7 +1079,7 @@ function renderTabs(){
   const n=unseenCount();
   const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">'
    +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>','SAISIR'],
-    ['club','\u2663','CLUB'],['profile','\u25CF','MY<br>POKER']];
+    ['club','\u2663','CLUB'],['profile','\u25CF','MY POKER']];
   tabs.innerHTML=items.map(([k,ic,l])=>'<button class="tab'+(v===k?' on':'')+(k==='setup'?' add':'')
     +'" data-v="'+k+'"><span class="ic"'+(k==='activity'&&n?' style="color:var(--cyan)"':'')+'>'
     +ic+'</span>'+l+'</button>').join('');
@@ -1952,7 +1954,8 @@ function viewClub(id){
    +'<div class="rule"></div><span class="lbl">SALONS</span>'
    +'<div class="chtree">'+channelTree(id,null,0)+'</div>'
    +(admin?'<button class="btn" id="ch-root" style="margin-top:8px">+ SALON À LA RACINE</button>':'')
-   +'<div class="rule"></div><span class="lbl">MEMBRES</span>'
+   +'<div class="rule"></div><div style="display:flex;align-items:center;gap:8px"><span class="lbl" style="flex:1">MEMBRES</span>'
+   +(admin?'<button class="btn" id="cl-inv" style="margin-bottom:6px">+ INVITER UN AMI</button>':'')+'</div>'
    +members.map(m=>'<div class="frow"><button class="fgo" data-p="'+m.user+'">'
      +'<span class="av">'+initials(m.user)+'</span><span class="fh">@'+esc(player(m.user).handle)
      +'<i>'+(m.role==='owner'?'chef':m.role==='admin'?'admin':'membre')+'</i></span></button>'
@@ -1964,6 +1967,7 @@ function viewClub(id){
      ?'<button class="btn full" id="cl-del" style="color:var(--raise);border-color:var(--raise-d)">SUPPRIMER LE CLUB</button>'
      :'<button class="btn full" id="cl-leave">QUITTER LE CLUB</button>');
   $('cb-copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(c.code); $('cb-copy').textContent='\u2713'; }catch(e){ prompt('Code :',c.code); } };
+  const inv=$('cl-inv'); if(inv) inv.onclick=()=>inviteSheet(id);
   body.querySelectorAll('.chrow').forEach(b=>b.onclick=()=>go('channel',{id:b.dataset.ch}));
   const addChannel=parent=>{
     const name=prompt(parent?'Nom du sous-salon :':'Nom du salon :'); if(!name||!name.trim()) return;
@@ -1988,6 +1992,29 @@ function viewClub(id){
     const r=await sb.from('club_members').delete().eq('club_id',id).eq('user_id',DB.me);
     if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); stack=[]; route={v:'club'}; render();
   };
+}
+/* Inviter directement : mes abonnements + mes abonnés qui ne sont pas encore membres. */
+function inviteSheet(clubId){
+  const me=DB.players[DB.me], inClub=new Set(clubMembers(clubId).map(m=>m.user));
+  const ids=new Set([...(me.following||[]),
+    ...Object.values(DB.players).filter(q=>(q.following||[]).includes(DB.me)).map(q=>q.id)]);
+  const list=[...ids].filter(x=>x!==DB.me&&!inClub.has(x)).map(x=>DB.players[x]).filter(Boolean);
+  const m=document.createElement('div'); m.className='mask';
+  m.innerHTML='<div class="sheet"><h2>Inviter dans le club</h2>'
+   +(list.length?list.map(q=>'<div class="frow"><span class="fgo" style="cursor:default">'
+      +'<span class="av">'+initials(q.id)+'</span><span class="fh">@'+esc(q.handle)+'<i>'+esc(q.name)+'</i></span></span>'
+      +'<button class="btn" data-inv="'+q.id+'">AJOUTER</button></div>').join('')
+     :'<div class="empty" style="padding:16px 0"><p>Tous tes amis sont déjà là \u2014 ou tu n\'en suis aucun. '
+      +'Le code d\'invitation marche pour tout le monde.</p></div>')
+   +'<button class="btn full" id="inv-x" style="margin-top:10px">FERMER</button></div>';
+  document.body.appendChild(m); m.onclick=e=>{ if(e.target===m) m.remove(); };
+  m.querySelector('#inv-x').onclick=()=>m.remove();
+  m.querySelectorAll('[data-inv]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; b.textContent='\u2026';
+    const r=await sb.from('club_members').insert({club_id:clubId,user_id:b.dataset.inv,role:'member'});
+    if(r.error){ b.disabled=false; b.textContent='AJOUTER'; alert('Base : '+r.error.message); return; }
+    b.textContent='\u2713 AJOUTÉ'; await cloudLoad(); render();
+  });
 }
 async function ensureHands(ids){
   const missing=ids.filter(i=>!getHand(i));
