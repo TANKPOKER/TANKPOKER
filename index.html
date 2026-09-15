@@ -131,6 +131,12 @@ button{font-family:var(--font)}
   line-height:1;border:1px solid rgba(0,0,0,.3)}
 .card .su{font-size:.8em;margin-top:1px}
 .card.s-s{color:#14181D} .card.s-h{color:#D63C36} .card.s-d{color:#2C7BD1} .card.s-c{color:#1F8A52}
+.stbar .cards .card.past{opacity:.42}
+.stbar .cards .card.fresh{box-shadow:0 0 0 1.5px var(--cyan)}
+.stbar .cards{display:flex;gap:3px}
+.stbar .cards .card.fresh+.card.fresh{margin-left:0}
+.card.bfix{cursor:pointer}
+.card.bfix:active{transform:scale(.93)}
 .card.back{background:
    repeating-linear-gradient(135deg,#C8332D 0 3px,#A5221D 3px 6px);
   border:1.5px solid #F4E9E1;box-shadow:0 1px 3px rgba(0,0,0,.4)}
@@ -1936,21 +1942,25 @@ function viewHand(id){
    +'<div style="margin-left:auto;display:flex;gap:3px">'+H.cfg.heroCards.map(c=>card(c,'c-sm')).join('')+'</div>'
    +'</div>';
 
-  let cur=null;
+  let cur=null, shown=0;
   H.actions.forEach(a=>{
     if(a.street!==cur){
       cur=a.street;
-      const b=cur==='flop'?H.board.slice(0,3):cur==='turn'?H.board.slice(3,4)
-             :cur==='river'?H.board.slice(4,5):[];
+      const upto=cur==='flop'?3:cur==='turn'?4:cur==='river'?5:0;
+      shown=Math.max(shown,upto);
+      const fresh=cur==='flop'?0:upto-1;   // index de la carte qui vient de tomber
+      const b=H.board.slice(0,upto);
       h+='<div class="stbar"><span class="nm">'+cur.toUpperCase()+'</span>'
-        +(b.length?'<span class="cards">'+b.map(c=>card(c,'c-xs')).join('')+'</span>':'')
+        +(b.length?'<span class="cards">'+b.map((c,k)=>
+            card(c,'c-xs'+(k>=fresh?' fresh':' past'))).join('')+'</span>':'')
         +'<span class="pot">pot <b>'+fmt(pots[cur]||0)+'</b> bb</span></div>';
     }
     const gi=H.actions.indexOf(a), mineH=H.author===DB.me;
     h+='<div class="arow'+(a.hero?' hero':'')+'"><span class="pos">'+a.pos+'</span>'
       +'<span class="slot">'+(a.hero?CROWN:'')+'</span>'
       +'<span class="ap '+aclass(a.type)+'">'+alabel(a.type)+'</span>'
-      +(a.type==='bet'||a.type==='raise'?'<span class="amt">'+fmt(a.amount)+' bb</span>':'')
+      +((a.type==='bet'||a.type==='raise'||a.type==='call')&&a.amount
+        ?'<span class="amt">'+fmt(a.amount)+' bb</span>':'')
       +(a.allIn?'<span class="ai">TAPIS</span>':'')
       +(mineH?'<span class="nedit" data-n="'+gi+'" role="button" title="note">'
         +(a.note||(a.reasons&&a.reasons.length)?'\u270E':'\uD83D\uDCAC')+'</span>':'')
@@ -1961,6 +1971,17 @@ function viewHand(id){
         +esc(a.note||'')+'</div>';
   });
 
+  /* tapis avant la fin : les cartes tombées après la dernière action n'avaient
+     aucune ligne où s'afficher — la river manquait à l'appel */
+  if(H.board.length>shown){
+    const lbl=shown<=3&&H.board.length>=5?'TURN + RIVER'
+      :H.board.length===4?'TURN':'RIVER';
+    h+='<div class="stbar"><span class="nm">'+lbl+'</span>'
+      +'<span class="cards">'+H.board.map((c,k)=>
+         card(c,'c-xs'+(k>=shown?' fresh':' past'))).join('')+'</span>'
+      +'<span class="pot">tapis \u00b7 pot <b>'+fmt(H.potFinal)+'</b> bb</span></div>';
+    shown=H.board.length;
+  }
   h+=showdownHTML(H);
 
   h+='<div class="res"><div><div class="k">RÉSULTAT</div>'
@@ -2088,7 +2109,8 @@ function tableHTML(s,lastBySeat,toActIdx,reveal,winners,maskEntry){
   let h='<div class="tw"><div class="felt"></div>';
   h+='<div class="street">'+(s.over?'FIN DE LA MAIN':s.street.toUpperCase())+'</div>';
   h+='<div class="centre"><div class="tboard">';
-  h+=s.board.length?s.board.map(c=>card(c,'c-md')).join('')
+  h+=s.board.length?s.board.map((c,bi)=>
+      card(c,'c-md'+(maskEntry?' bfix':'')).replace('<div class="card ','<div data-b="'+bi+'" class="card ')).join('')
     :'<div style="color:var(--dim);font-size:12px;letter-spacing:.1em">\u2014</div>';
   h+='</div><div class="potline">POT <b>'+fmt(pot(s))+'</b> bb</div></div>'
    +'<div class="wmark"><svg viewBox="0 0 24 24"><path d="'
@@ -2195,8 +2217,9 @@ function usedCards(){
   if(!S) u.push(...cfg.heroCards);
   return u;
 }
-function pickCards(n,title,cb,minN){
-  const used=usedCards(), sel=[], variable=minN!==undefined&&minN<n;
+function pickCards(n,title,cb,minN,freeing){
+  const used=usedCards().filter(c=>!(freeing||[]).includes(c));
+  const sel=[], variable=minN!==undefined&&minN<n;
   const mask=document.createElement('div'); mask.className='mask';
   mask.innerHTML='<div class="sheet"><h2>'+title+'</h2><div id="pg"></div>'
     +(variable?'<div class="acts" style="margin-top:10px">'
@@ -2320,6 +2343,16 @@ function viewEntry(){
   if(heroTurn) h+=noteHTML(pend,true);
   body.innerHTML=h;
   /* toucher un siège = fold/check automatiques jusqu'à lui, annulables en une fois */
+  /* tap sur une carte du board (en saisie) = la corriger, sans toucher au reste */
+  body.querySelectorAll('[data-b]').forEach(el=>{
+    el.onclick=ev=>{ ev.stopPropagation();
+      const bi=+el.dataset.b, was=S.board[bi];
+      pickCards(1,'Corriger la carte',cs=>{
+        if(!cs.length) return;
+        push(); S.board[bi]=cs[0]; render();
+      },undefined,[was]);
+    };
+  });
   const hh=body.querySelector('.seat.hero .hand');
   if(hh){ hh.style.cursor='pointer';
     hh.onclick=e=>{ e.stopPropagation(); MASK=!MASK; store.set('maskCards',MASK); render(); }; }
@@ -2340,11 +2373,16 @@ function viewEntry(){
     return;
   }
   if(S.toAct===null){
+    const STREET_TITLE={flop:'Le flop',turn:'La turn',river:'La river'};
+    const ask=()=>pickCards(NEED[S.street],STREET_TITLE[S.street]||'La carte',
+      cs=>{push();S.board.push(...cs);openStreet(S);render();});
     foot.innerHTML='<div class="acts"><button class="act" id="u">ANNULER</button>'
      +'<button class="act cy" id="d">SAISIR LE '+S.street.toUpperCase()+'</button></div>';
     $('u').onclick=undo;
-    $('d').onclick=()=>pickCards(NEED[S.street],S.street==='flop'?'Le flop':'La carte',
-      cs=>{push();S.board.push(...cs);openStreet(S);render();});
+    $('d').onclick=ask;
+    /* l'action de la street est finie : on ouvre le sélecteur sans faire
+       cliquer — le bouton reste là si le joueur ferme la feuille */
+    if(!document.querySelector('.mask')) setTimeout(ask,140);
     return;
   }
   foot.innerHTML=sizingsHTML()+actionsHTML(); bindFoot();
@@ -2475,10 +2513,20 @@ function bindFoot(){
       inp.onblur=apply;
     };
   }
+  /* un tap sur un sizing proposé = la mise part tout de suite (un clic de moins
+     à chaque décision). Le ↩ annule si le doigt a glissé. */
   foot.querySelectorAll('.sz').forEach(b=>b.onclick=()=>{
-    pendingSize=+b.dataset.i; pendingAmt=+b.dataset.v;
-    const wv=$('whv'); if(wv) wv.textContent='\u2014';
-    foot.querySelectorAll('.sz').forEach(x=>x.classList.remove('on')); b.classList.add('on');});
+    const lg=legal(S);   // objet {fold,check,call,bet,raise}, pas un tableau
+    const a=lg.raise?'raise':lg.bet?'bet':null;
+    if(!a){ b.classList.add('on'); return; }
+    const wasHero=S.seats[S.toAct]&&S.seats[S.toAct].hero;
+    push(); apply(S,a,+b.dataset.v);
+    if(wasHero&&(pend.note||pend.reasons.length)){
+      const na=S.actions[S.actions.length-1];
+      na.note=pend.note; na.reasons=pend.reasons.slice(); na.notePrivate=pend.notePrivate;
+    }
+    pend={note:'',reasons:[],notePrivate:false};
+    pendingSize=null; pendingAmt=null; render();});
   foot.querySelectorAll('.act[data-a]').forEach(b=>b.onclick=()=>{
     const a=b.dataset.a;
     const wasHero=S.seats[S.toAct]&&S.seats[S.toAct].hero;
