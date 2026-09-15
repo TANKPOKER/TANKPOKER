@@ -135,6 +135,29 @@ button{font-family:var(--font)}
 .stbar .cards .card.fresh{box-shadow:0 0 0 1.5px var(--cyan)}
 .stbar .cards{display:flex;gap:3px}
 .stbar .cards .card.fresh+.card.fresh{margin-left:0}
+.clubrow .ht i{display:block;font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
+.codebox{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;border-radius:9px;
+  background:var(--panel2);border:1px dashed var(--line2)}
+.codebox span{font:800 9.5px var(--fd);letter-spacing:.12em;color:var(--dim)}
+.codebox b{font-family:var(--fm);font-size:16px;letter-spacing:.14em;flex:1}
+.chtree{display:flex;flex-direction:column;gap:4px}
+.chrow{display:flex;align-items:center;gap:8px;width:100%;text-align:left;cursor:pointer;
+  background:var(--card2);border:1px solid var(--cardline);border-radius:8px;padding:9px 10px;
+  color:var(--text);font:inherit}
+.chrow .chn{flex:1;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chadd{width:26px;height:26px;border-radius:7px;border:1px solid var(--line2);display:flex;
+  align-items:center;justify-content:center;color:var(--cyan);font-weight:800}
+.shby{font-size:11px;color:var(--muted);margin:10px 4px 4px}
+.unshare{color:var(--raise);cursor:pointer;text-decoration:underline}
+.ib.nb{position:relative}
+.pill{position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+  background:var(--raise);color:#fff;font:800 9.5px/16px var(--fd);text-align:center;letter-spacing:0}
+.swatches{display:flex;gap:10px}
+.sw{width:34px;height:34px;border-radius:50%;border:3px solid transparent;cursor:pointer}
+.sw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--panel)}
+.szrow{display:flex;gap:6px;align-items:center}
+.szrow input{width:64px;padding:7px 6px;text-align:center}
+.szrow .un{font-size:11px;color:var(--muted);margin-left:2px}
 .card.bfix{cursor:pointer}
 .card.bfix:active{transform:scale(.93)}
 .card.back{background:
@@ -717,15 +740,23 @@ async function cloudLoad(){
   /* uid AVANT tout : DB.me n'est renseigné qu'en fin de fonction, et la
      globale session est la seule source fiable à cet instant */
   const uid=session&&session.user?session.user.id:null;
-  const [pr,hd,rc,cm,fl,ss]=await Promise.all([
+  const [pr,hd,rc,cm,fl,ss,cl,cmb,chn,chh]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('hands').select('*').order('created_at',{ascending:false}).limit(200),
     sb.from('reactions').select('*'),
     sb.from('comments').select('*').order('created_at',{ascending:true}),
     sb.from('follows').select('*'),
     uid?sb.from('sessions').select('*').eq('user_id',uid)
-      .order('played_at',{ascending:true}):Promise.resolve({data:[]})
+      .order('played_at',{ascending:true}):Promise.resolve({data:[]}),
+    sb.from('clubs').select('*'),
+    sb.from('club_members').select('*'),
+    sb.from('channels').select('*').order('pos',{ascending:true}),
+    sb.from('club_hands').select('*').order('created_at',{ascending:false})
   ]);
+  DB.clubs=(cl.data||[]).map(c=>({id:c.id,name:c.name,code:c.code,owner:c.owner_id}));
+  DB.clubMembers=(cmb.data||[]).map(m=>({club:m.club_id,user:m.user_id,role:m.role}));
+  DB.channels=(chn.data||[]).map(x=>({id:x.id,club:x.club_id,parent:x.parent_id,name:x.name,pos:x.pos}));
+  DB.clubHands=(chh.data||[]).map(x=>({channel:x.channel_id,hand:x.hand_id,by:x.shared_by,at:Date.parse(x.created_at)}));
   DB.players={}; DB.hands=[]; MY.liked={}; DB.sessions=[];
   (pr.data||[]).forEach(p=>DB.players[p.id]={id:p.id,handle:p.handle,
     name:p.name||p.handle,stakes:p.stakes||'',bio:p.bio||'',
@@ -861,6 +892,8 @@ const MY={liked:{}};
 
 /* Stockage local : localStorage quand il existe (site déployé), repli mémoire
    sinon (aperçu sandboxé). Rien ne casse, la persistance est un bonus. */
+if(typeof document!=='undefined') document.addEventListener('DOMContentLoaded',()=>{
+  if(typeof applyAccent==='function') applyAccent((typeof store!=='undefined'&&store.get('accent'))||'cyan'); });
 function applyTheme(t){
   document.body.classList.toggle('light',t==='light');
   const m=document.querySelector('meta[name="theme-color"]');
@@ -953,7 +986,7 @@ const WORDMARK='<span class="wm">'+BRAND+'<i></i></span>';
 /* Liens profonds : #/main/xxx, #/joueur/xxx, #/feed, #/hot, #/notifs.
    Une main devient collable dans un groupe WhatsApp — c'est le canal
    d'acquisition numéro un d'un site de poker. */
-const HASH_OF={home:'feed',week:'hot',activity:'notifs',profile:'profil',setup:'saisir'};
+const HASH_OF={home:'feed',week:'hot',activity:'notifs',club:'club',profile:'profil',setup:'saisir'};
 const VIEW_OF={feed:'home',hot:'week',notifs:'activity',profil:'profile',saisir:'setup'};
 function urlFor(r){
   if(r.v==='hand'&&r.id) return '#/main/'+r.id;
@@ -1021,6 +1054,10 @@ function render(){
   else if(v==='week') viewWeek();
   else if(v==='auth') viewAuth();
   else if(v==='account'){ if(!DB.me) viewAuth(); else viewAccount(); }
+  else if(v==='settings') viewSettings();
+  else if(v==='club') viewClubs();
+  else if(v==='clubroom') viewClub(route.id);
+  else if(v==='channel') viewChannel(route.id);
   else if(v==='activity') viewActivity();
   else if(v==='profile'){
     const id=route.id||DB.me;
@@ -1040,7 +1077,7 @@ function renderTabs(){
   const n=unseenCount();
   const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">'
    +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>','SAISIR'],
-    ['activity','\u25C9','NOTIFS'+(n?' ('+n+')':'')],['profile','\u25CF','MY<br>POKER']];
+    ['club','\u2663','CLUB'],['profile','\u25CF','MY<br>POKER']];
   tabs.innerHTML=items.map(([k,ic,l])=>'<button class="tab'+(v===k?' on':'')+(k==='setup'?' add':'')
     +'" data-v="'+k+'"><span class="ic"'+(k==='activity'&&n?' style="color:var(--cyan)"':'')+'>'
     +ic+'</span>'+l+'</button>').join('');
@@ -1052,6 +1089,7 @@ function renderTabs(){
 const PERS='<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">'
  +'<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/>'
  +'<path d="M4.5 20c1.6-3.6 4.3-5.2 7.5-5.2s5.9 1.6 7.5 5.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const HEART='<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.2-9.3C1.5 7.6 3.8 4.5 7 4.5c2 0 3.6 1.1 5 2.8 1.4-1.7 3-2.8 5-2.8 3.2 0 5.5 3.1 4.2 6.7C19.5 15.9 12 20.5 12 20.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
 function header(title,opts){
   opts=opts||{};
   hdr.innerHTML=(opts.back?'<button class="ib" id="bk">\u2039</button>':'')
@@ -1060,12 +1098,12 @@ function header(title,opts){
     +(opts.sup?'<div class="sup" id="sup">'+opts.sup+'</div>':'')
     +(opts.close?'<button class="ib" id="cl" style="margin-left:auto">\u2715</button>':'');
   if(!opts.close&&!opts.sup){
+    const n=unseenCount();
     hdr.insertAdjacentHTML('beforeend',
-      '<button class="ib" id="th" style="margin-left:auto" aria-label="changer de thème">'
-      +(document.body.classList.contains('light')?'\u263E':'\u2600')+'</button>'
+      '<button class="ib nb" id="ntf" style="margin-left:auto" aria-label="notifications">'+HEART
+      +(n?'<span class="pill">'+(n>9?'10+':n)+'</span>':'')+'</button>'
       +'<button class="ib" id="acc" aria-label="mon compte">'+PERS+'</button>');
-    $('th').onclick=()=>{
-      applyTheme(document.body.classList.contains('light')?'dark':'light'); render(); };
+    $('ntf').onclick=()=>go('activity');
     $('acc').onclick=()=>go('account');
   }
   /* le logo est un bouton retour-accueil ; en pleine saisie, il passe par la
@@ -1818,6 +1856,238 @@ function sessionEditor(sess){
   m.onclick=ev=>{ if(ev.target===m) m.remove(); };
   draw();
 }
+/* Accent : 6 teintes, chacune déclinée pour le thème sombre et le clair. */
+const ACCENTS={
+  cyan:  {n:'Cyan',   d:['#00D8C8','#00887F','#04211F'], l:['#009486','#BFE9E4','#E2F5F3']},
+  vert:  {n:'Vert',   d:['#2FD97A','#1D8A4E','#07271A'], l:['#1E8F52','#C6EED6','#E6F7EC']},
+  ambre: {n:'Ambre',  d:['#FFC53D','#A67B12','#2A2008'], l:['#B27A00','#F5E3B0','#FBF3DC']},
+  violet:{n:'Violet', d:['#B388FF','#6D4AC2','#1B1230'], l:['#6B47C4','#E1D5FA','#F1ECFD']},
+  rose:  {n:'Rose',   d:['#FF6EA9','#B23A6D','#2B0F1D'], l:['#C02B6A','#F9D3E4','#FCEAF2']},
+  bleu:  {n:'Bleu',   d:['#5AA9FF','#2B6BC2','#0D1B2E'], l:['#2367C4','#D0E2FA','#EAF1FC']}};
+function applyAccent(k){
+  const a=ACCENTS[k]||ACCENTS.cyan; store.set('accent',k);
+  const light=document.body.classList.contains('light');
+  const [c,d,i]=light?a.l:a.d;
+  const r=document.documentElement.style;
+  r.setProperty('--cyan',c); r.setProperty('--cyan-d',d); r.setProperty('--cyan-i',i);
+}
+/* Sizings préférés : ce que les puces proposent pendant la saisie. */
+function szPrefs(){ return Object.assign({},SZ_DEF,store.get('sz')||{}); }
+/* ================= CLUBS ================= */
+function myRole(clubId){ const m=(DB.clubMembers||[]).find(x=>x.club===clubId&&x.user===DB.me); return m?m.role:null; }
+function isClubAdmin(clubId){ const r=myRole(clubId); return r==='owner'||r==='admin'; }
+function clubMembers(clubId){ return (DB.clubMembers||[]).filter(x=>x.club===clubId); }
+function childChannels(clubId,parent){
+  return (DB.channels||[]).filter(x=>x.club===clubId&&(x.parent||null)===(parent||null))
+    .sort((a,b)=>a.pos-b.pos||a.name.localeCompare(b.name));
+}
+function channelTree(clubId,parent,depth){
+  return childChannels(clubId,parent).map(ch=>{
+    const n=(DB.clubHands||[]).filter(x=>x.channel===ch.id).length;
+    return '<button class="chrow" data-ch="'+ch.id+'" style="padding-left:'+(12+depth*18)+'px">'
+      +'<span class="chn">'+(depth?'\u2514 ':'# ')+esc(ch.name)+'</span>'
+      +(n?'<span class="bdg">'+n+' main'+(n>1?'s':'')+'</span>':'')
+      +(isClubAdmin(clubId)?'<span class="chadd" data-add="'+ch.id+'" role="button" title="sous-salon">+</span>':'')
+      +'</button>'+channelTree(clubId,ch.id,depth+1);
+  }).join('');
+}
+function viewClubs(){
+  header('Clubs');
+  if(!DB.me){ viewAuth(); return; }
+  if(!LIVE){
+    body.innerHTML='<div class="empty"><div class="big">Les clubs vivent en ligne</div>'
+      +'<p>Cette fonction se teste sur le site branché à Supabase.</p></div>'; return; }
+  const mine=(DB.clubs||[]);
+  body.innerHTML='<div class="msg" style="margin-bottom:12px"><b>Un club</b> = un chef, un code d\'invitation, '
+   +'des salons imbriqués (comme Discord) et des mains partagées entre membres \u2014 même privées.</div>'
+   +(mine.length?mine.map(c=>'<button class="hrow clubrow" data-club="'+c.id+'">'
+       +'<span class="av">'+esc(c.name.slice(0,2).toUpperCase())+'</span>'
+       +'<span class="ht">'+esc(c.name)+'<i>'+clubMembers(c.id).length+' membre'+(clubMembers(c.id).length>1?'s':'')
+       +(myRole(c.id)==='owner'?' \u00b7 chef':myRole(c.id)==='admin'?' \u00b7 admin':'')+'</i></span></button>').join('')
+     :'<div class="empty" style="padding:16px 0"><p>Tu n\'es dans aucun club pour l\'instant.</p></div>')
+   +'<div class="rule"></div>'
+   +'<button class="btn full pri" id="cl-new">CRÉER UN CLUB</button>'
+   +'<div class="field" style="margin-top:12px"><span class="lbl">REJOINDRE AVEC UN CODE</span>'
+   +'<div style="display:flex;gap:8px"><input class="cbox" id="cl-code" maxlength="8" placeholder="AQUI42" '
+   +'style="flex:1;text-transform:uppercase;letter-spacing:.12em">'
+   +'<button class="btn" id="cl-join">REJOINDRE</button></div><div id="cl-err" class="msg err" style="display:none;margin-top:8px"></div></div>';
+  body.querySelectorAll('.clubrow').forEach(b=>b.onclick=()=>go('clubroom',{id:b.dataset.club}));
+  $('cl-new').onclick=()=>{
+    const m=document.createElement('div'); m.className='mask';
+    m.innerHTML='<div class="sheet"><h2>Nouveau club</h2>'
+      +'<div class="field"><span class="lbl">NOM DU CLUB</span><input class="cbox" id="nc-n" maxlength="40" placeholder="Poker Aquitaine"></div>'
+      +'<div id="nc-err" class="msg err" style="display:none;margin-bottom:8px"></div>'
+      +'<button class="btn full pri" id="nc-ok">CRÉER \u2014 je serai le chef</button></div>';
+    document.body.appendChild(m); m.onclick=e=>{ if(e.target===m) m.remove(); };
+    m.querySelector('#nc-ok').onclick=async()=>{
+      const name=m.querySelector('#nc-n').value.trim();
+      const err=m.querySelector('#nc-err');
+      if(name.length<2){ err.style.display='block'; err.textContent='Deux caractères minimum.'; return; }
+      const code=Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
+      const r=await sb.from('clubs').insert({name,code,owner_id:DB.me}).select('id').single();
+      if(r.error){ err.style.display='block'; err.textContent='Base : '+r.error.message; return; }
+      m.remove(); await cloudLoad(); go('clubroom',{id:r.data.id});
+    };
+  };
+  $('cl-join').onclick=async()=>{
+    const code=$('cl-code').value.trim().toUpperCase(), err=$('cl-err');
+    if(!code){ return; }
+    const r=await sb.rpc('join_club',{p_code:code});
+    if(r.error){ err.style.display='block'; err.textContent=r.error.message.replace(/^.*?: /,''); return; }
+    await cloudLoad(); go('clubroom',{id:r.data});
+  };
+}
+function viewClub(id){
+  const c=(DB.clubs||[]).find(x=>x.id===id);
+  if(!c){ header('Club',{back:true}); body.innerHTML='<div class="empty"><div class="big">Club introuvable</div></div>'; return; }
+  header(c.name,{back:true});
+  const admin=isClubAdmin(id), members=clubMembers(id);
+  body.innerHTML='<div class="pcard"><div style="display:flex;align-items:center;gap:10px">'
+   +'<span class="av big">'+esc(c.name.slice(0,2).toUpperCase())+'</span>'
+   +'<div><div style="font-weight:800;font-size:16px">'+esc(c.name)+'</div>'
+   +'<div style="font-size:12px;color:var(--muted)">'+members.length+' membre'+(members.length>1?'s':'')
+   +' \u00b7 chef : @'+esc(player(c.owner).handle)+'</div></div></div>'
+   +'<div class="codebox"><span>CODE D\'INVITATION</span><b>'+c.code+'</b>'
+   +'<button class="btn" id="cb-copy">COPIER</button></div></div>'
+   +'<div class="rule"></div><span class="lbl">SALONS</span>'
+   +'<div class="chtree">'+channelTree(id,null,0)+'</div>'
+   +(admin?'<button class="btn" id="ch-root" style="margin-top:8px">+ SALON À LA RACINE</button>':'')
+   +'<div class="rule"></div><span class="lbl">MEMBRES</span>'
+   +members.map(m=>'<div class="frow"><button class="fgo" data-p="'+m.user+'">'
+     +'<span class="av">'+initials(m.user)+'</span><span class="fh">@'+esc(player(m.user).handle)
+     +'<i>'+(m.role==='owner'?'chef':m.role==='admin'?'admin':'membre')+'</i></span></button>'
+     +(c.owner===DB.me&&m.user!==DB.me
+       ?'<button class="btn fdel" data-role="'+m.user+'" data-cur="'+m.role+'">'+(m.role==='admin'?'RETIRER ADMIN':'NOMMER ADMIN')+'</button>':'')
+     +'</div>').join('')
+   +'<div class="rule"></div>'
+   +(c.owner===DB.me
+     ?'<button class="btn full" id="cl-del" style="color:var(--raise);border-color:var(--raise-d)">SUPPRIMER LE CLUB</button>'
+     :'<button class="btn full" id="cl-leave">QUITTER LE CLUB</button>');
+  $('cb-copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(c.code); $('cb-copy').textContent='\u2713'; }catch(e){ prompt('Code :',c.code); } };
+  body.querySelectorAll('.chrow').forEach(b=>b.onclick=()=>go('channel',{id:b.dataset.ch}));
+  const addChannel=parent=>{
+    const name=prompt(parent?'Nom du sous-salon :':'Nom du salon :'); if(!name||!name.trim()) return;
+    const sib=childChannels(id,parent);
+    sb.from('channels').insert({club_id:id,parent_id:parent,name:name.trim().slice(0,40),pos:sib.length})
+      .then(async r=>{ if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); render(); });
+  };
+  body.querySelectorAll('.chadd').forEach(b=>b.onclick=e=>{ e.stopPropagation(); addChannel(b.dataset.add); });
+  const cr=$('ch-root'); if(cr) cr.onclick=()=>addChannel(null);
+  body.querySelectorAll('.fgo').forEach(b=>b.onclick=()=>go('profile',{id:b.dataset.p}));
+  body.querySelectorAll('[data-role]').forEach(b=>b.onclick=async()=>{
+    const role=b.dataset.cur==='admin'?'member':'admin';
+    const r=await sb.from('club_members').update({role}).eq('club_id',id).eq('user_id',b.dataset.role);
+    if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); render();
+  });
+  const dl=$('cl-del'); if(dl) dl.onclick=async()=>{
+    if(!confirm('Supprimer le club, ses salons et ses partages ? Les mains elles-mêmes restent à leurs auteurs.')) return;
+    const r=await sb.from('clubs').delete().eq('id',id);
+    if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); stack=[]; route={v:'club'}; render();
+  };
+  const lv=$('cl-leave'); if(lv) lv.onclick=async()=>{
+    const r=await sb.from('club_members').delete().eq('club_id',id).eq('user_id',DB.me);
+    if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); stack=[]; route={v:'club'}; render();
+  };
+}
+async function ensureHands(ids){
+  const missing=ids.filter(i=>!getHand(i));
+  if(!missing.length||!LIVE) return;
+  const r=await sb.from('hands').select('*').in('id',missing);
+  (r.data||[]).forEach(x=>{ if(!getHand(x.id)) DB.hands.push(Object.assign({
+    id:x.id,author:x.author_id,question:x.question,private:!!x.is_private,potFinal:+x.pot_final,
+    invested:+x.invested,result:+x.result,won:x.won,endReason:x.end_reason,tags:x.tags||[],
+    createdAt:Date.parse(x.created_at),likes:0,dislikes:0,comments:[],rawReactions:[]},x.payload)); });
+}
+function viewChannel(id){
+  const ch=(DB.channels||[]).find(x=>x.id===id);
+  if(!ch){ header('Salon',{back:true}); body.innerHTML='<div class="empty"><div class="big">Salon introuvable</div></div>'; return; }
+  const c=(DB.clubs||[]).find(x=>x.id===ch.club);
+  header('# '+ch.name,{back:true,sup:c?c.name:''});
+  const shares=(DB.clubHands||[]).filter(x=>x.channel===id);
+  const ids=shares.map(x=>x.hand);
+  const draw=()=>{
+    const hs=ids.map(getHand).filter(Boolean);
+    body.innerHTML='<button class="btn full pri" id="sh-here">\u2197 PARTAGER UNE DE MES MAINS ICI</button>'
+     +(isClubAdmin(ch.club)?'<button class="btn" id="ch-ren" style="margin-top:8px">RENOMMER / SUPPRIMER LE SALON</button>':'')
+     +'<div class="rule"></div>'
+     +(hs.length?hs.map(h=>{
+        const sh=shares.find(x=>x.hand===h.id);
+        return '<div class="shby">partagée par @'+esc(player(sh.by||h.author).handle)
+          +(h.private?' \u00b7 \uD83D\uDD12 privée, visible ici seulement':'')
+          +((sh.by===DB.me||isClubAdmin(ch.club))?' <span class="unshare" data-un="'+h.id+'" role="button">retirer</span>':'')
+          +'</div>'+handCard(h); }).join('')
+       :'<div class="empty" style="padding:18px 0"><div class="big">Salon vide</div><p>Partage une main pour lancer la discussion.</p></div>');
+    bindCards();
+    $('sh-here').onclick=()=>shareToChannel(id);
+    const rn=$('ch-ren'); if(rn) rn.onclick=async()=>{
+      const name=prompt('Nouveau nom (vide = supprimer le salon et ses sous-salons) :',ch.name);
+      if(name===null) return;
+      const r=name.trim()?await sb.from('channels').update({name:name.trim().slice(0,40)}).eq('id',id)
+                          :await sb.from('channels').delete().eq('id',id);
+      if(r.error){ alert('Base : '+r.error.message); return; }
+      await cloudLoad(); if(name.trim()) render(); else { stack.pop(); route={v:'clubroom',id:ch.club}; render(); }
+    };
+    body.querySelectorAll('.unshare').forEach(b=>b.onclick=async()=>{
+      const r=await sb.from('club_hands').delete().eq('channel_id',id).eq('hand_id',b.dataset.un);
+      if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); render();
+    });
+  };
+  draw(); ensureHands(ids).then(()=>{ if(route.v==='channel'&&route.id===id) draw(); });
+}
+function shareToChannel(channelId){
+  const mine=DB.hands.filter(h=>h.author===DB.me).sort((a,b)=>b.createdAt-a.createdAt);
+  const already=new Set((DB.clubHands||[]).filter(x=>x.channel===channelId).map(x=>x.hand));
+  const m=document.createElement('div'); m.className='mask';
+  m.innerHTML='<div class="sheet"><h2>Partager dans ce salon</h2>'
+   +(mine.length?'<div class="hlist">'+mine.filter(h=>!already.has(h.id)).map(h=>
+      '<button class="hrow" data-share="'+h.id+'">'+h.cfg.heroCards.map(c=>card(c,'c-xxs')).join('')
+      +'<span class="ht">'+esc(h.question)+'</span>'+(h.private?'<span>\uD83D\uDD12</span>':'')+'</button>').join('')+'</div>'
+     :'<div class="empty" style="padding:16px 0"><p>Publie d\'abord une main (même privée).</p></div>')
+   +'<button class="btn full" id="sh-x" style="margin-top:10px">FERMER</button></div>';
+  document.body.appendChild(m); m.onclick=e=>{ if(e.target===m) m.remove(); };
+  m.querySelector('#sh-x').onclick=()=>m.remove();
+  m.querySelectorAll('[data-share]').forEach(b=>b.onclick=async()=>{
+    const r=await sb.from('club_hands').insert({channel_id:channelId,hand_id:b.dataset.share,shared_by:DB.me});
+    if(r.error){ alert('Base : '+r.error.message); return; }
+    m.remove(); await cloudLoad(); render();
+  });
+}
+function viewSettings(){
+  header('Paramètres',{back:true});
+  const acc=store.get('accent')||'cyan', light=document.body.classList.contains('light');
+  const sz=szPrefs();
+  const row=(id,lbl,vals,unit)=>'<div class="field"><span class="lbl">'+lbl+'</span>'
+    +'<div class="szrow" id="'+id+'">'+vals.map((v,i)=>
+      '<input class="cbox" type="number" inputmode="decimal" step="0.1" min="0" value="'+v+'" data-i="'+i+'">').join('')
+    +'<span class="un">'+unit+'</span></div></div>';
+  body.innerHTML='<span class="lbl">APPARENCE</span>'
+   +'<div class="rowbar mini" id="s-th"><button class="seg'+(light?'':' on')+'" data-v="dark">SOMBRE</button>'
+   +'<button class="seg'+(light?' on':'')+'" data-v="light">CLAIR</button></div>'
+   +'<div class="field"><span class="lbl">COULEUR DU SITE</span><div class="swatches">'
+   +Object.entries(ACCENTS).map(([k,a])=>'<button class="sw'+(k===acc?' on':'')+'" data-k="'+k
+     +'" style="background:'+(light?a.l[0]:a.d[0])+'" aria-label="'+a.n+'"></button>').join('')
+   +'</div></div>'
+   +'<div class="rule"></div><span class="lbl">MES SIZINGS EN SAISIE</span>'
+   +'<div style="font-size:12px;color:var(--muted);margin:-2px 0 10px">Ce que les puces proposent. '
+   +'La molette et le clavier restent libres.</div>'
+   +row('sz-open','OUVERTURE PRÉFLOP (CASH)',sz.open,'bb')
+   +row('sz-mtt','OUVERTURE PRÉFLOP (TOURNOI)',sz.mtt,'bb')
+   +row('sz-vs','FACE À UNE RELANCE',sz.vs,'\u00d7')
+   +row('sz-pct','POSTFLOP',sz.pct,'% pot')
+   +'<button class="btn" id="sz-reset">Remettre les sizings par défaut</button>';
+  [...$('s-th').children].forEach(b=>b.onclick=()=>{
+    applyTheme(b.dataset.v); applyAccent(store.get('accent')||'cyan'); render(); });
+  body.querySelectorAll('.sw').forEach(b=>b.onclick=()=>{ applyAccent(b.dataset.k); render(); });
+  const save=()=>{
+    const rd=id=>[...$(id).querySelectorAll('input')].map(x=>parseFloat(x.value))
+      .filter(v=>isFinite(v)&&v>0).slice(0,6);
+    const o=rd('sz-open'),m=rd('sz-mtt'),v=rd('sz-vs'),pc=rd('sz-pct');
+    store.set('sz',{open:o.length?o:SZ_DEF.open,mtt:m.length?m:SZ_DEF.mtt,
+      vs:v.length?v:SZ_DEF.vs,pct:pc.length?pc:SZ_DEF.pct});
+  };
+  body.querySelectorAll('.szrow input').forEach(x=>x.onchange=save);
+  $('sz-reset').onclick=()=>{ store.del('sz'); render(); };
+}
 function viewAccount(){
   header('Compte',{back:true});
   const p=DB.players[DB.me];
@@ -1828,8 +2098,10 @@ function viewAccount(){
    +socialRow(p)+'</div>'
    +'<button class="btn full" id="pe" style="margin-top:14px">MODIFIER LE PROFIL</button>'
    +(LIVE?'<button class="btn full" id="lo" style="margin-top:8px">SE DÉCONNECTER</button>':'')
+   +'<button class="btn full" id="st" style="margin-top:8px">\u2699 PARAMÈTRES</button>'
    +'<div class="rule"></div>'
    +'<button class="btn full" id="mp">\u25CF VOIR MON POKER</button>';
+  $('st').onclick=()=>go('settings');
   $('pe').onclick=()=>editProfile(DB.me);
   const lo=$('lo');
   if(lo) lo.onclick=async()=>{ await sb.auth.signOut(); stack=[]; route={v:'home'}; };
@@ -2408,6 +2680,7 @@ function confirmQuit(){
    · postflop : pourcentage du pot (25/33/50/75/POT + overbet)
    Plus la molette : un curseur pour tout sizing hors gamme, en bb. */
 const PCT=[[25,'25%'],[33,'33%'],[50,'50%'],[75,'75%'],[100,'POT'],[150,'OVB']];
+const SZ_DEF={open:[2,2.3,2.5,3],mtt:[2,2.2,2.5,3],vs:[3,3.5,4,5],pct:[25,33,50,75,100,150]};
 function sizingOptions(s){
   const lg=legal(s); if(!(lg.bet||lg.raise)) return null;
   const p=s.seats[s.toAct], P=pot(s), c=lg.raise?toCall(s):0;
@@ -2418,18 +2691,22 @@ function sizingOptions(s){
     const nR=s.actions.filter(a=>a.street==='preflop'&&a.type==='raise').length;
     if(nR===0){
       mode='open';
-      const set=s.cfg.format==='mtt'?[2,2.2,2.5,3]:[2,2.3,2.5,3];
+      const sp=(typeof szPrefs==='function')?szPrefs():SZ_DEF;
+      const set=s.cfg.format==='mtt'?sp.mtt:sp.open;
       opts=set.map(v=>({l:v+'bb',v:round2(v)}));
     }else if(nR===1){
       mode='3bet';
-      opts=[3,3.5,4,5].map(k=>({l:k+'x',v:round2(s.currentBet*k)}));
+      const spv=(typeof szPrefs==='function')?szPrefs().vs:SZ_DEF.vs;
+      opts=spv.map(k=>({l:k+'x',v:round2(s.currentBet*k)}));
     }else{
       mode='4bet';
       opts=[2.2,2.5,3].map(k=>({l:k+'x',v:round2(s.currentBet*k)}));
     }
   }else{
     mode=lg.bet?'bet':'raise';
-    opts=PCT.map(([k,l])=>({l,
+    const spp=(typeof szPrefs==='function')?szPrefs().pct:SZ_DEF.pct;
+    const pcts=spp.map(k=>[k,k===100?'POT':k>100?'OVB':k+'%']);
+    opts=pcts.map(([k,l])=>({l,
       v: lg.bet?round2(P*k/100):round2(p.committed+c+(P+c)*k/100)}));
   }
   opts=opts.map(o=>({l:o.l,v:Math.min(Math.max(o.v,minTo),max)}));
