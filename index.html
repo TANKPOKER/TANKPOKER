@@ -100,7 +100,9 @@ button{font-family:var(--font)}
 .tab.on{color:#FFFFFF;border-top-color:var(--cyan);background:rgba(255,255,255,.07)}
 .tab.on .ic{color:var(--cyan)}
 .tabs{overflow:visible;position:relative;z-index:40}
-.tab.add{overflow:visible}
+.tab.add{overflow:visible;-webkit-tap-highlight-color:transparent;background:none!important}
+/* iOS pose un voile translucide sur tout bouton touché : jamais sur le jeton ni les onglets */
+.tabs button,.tab{-webkit-tap-highlight-color:transparent}
 .tab.add .ic{position:relative;display:flex;align-items:center;justify-content:center;
   width:62px;height:62px;margin:-34px auto 1px;border-radius:50%;
   /* corps de la couleur du bandeau, léger volume */
