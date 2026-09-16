@@ -101,14 +101,29 @@ button{font-family:var(--font)}
 .tab.on .ic{color:var(--cyan)}
 .tabs{overflow:visible;position:relative;z-index:40}
 .tab.add{overflow:visible}
-.tab.add .ic{display:flex;align-items:center;justify-content:center;
-  width:54px;height:54px;margin:-30px auto 3px;border-radius:50%;
-  background:linear-gradient(160deg,#00E5D4,#00A99B);color:#04211F;
-  border:4px solid var(--tabbg);
-  box-shadow:0 6px 18px rgba(0,216,200,.45)}
+.tab.add .ic{position:relative;display:flex;align-items:center;justify-content:center;
+  width:62px;height:62px;margin:-34px auto 1px;border-radius:50%;
+  /* corps de la couleur du bandeau, léger volume */
+  background:radial-gradient(circle at 38% 32%,rgba(255,255,255,.10),transparent 55%),var(--tabbg);
+  color:var(--cyan);border:3px solid var(--tabbg);
+  box-shadow:0 0 0 1px rgba(255,255,255,.22),0 8px 20px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.4);
+  transition:transform .12s}
+/* couronne crantée : 6 blocs blancs, séparés du corps par un mince filet */
+.tab.add .ic::before{content:'';position:absolute;inset:0;border-radius:50%;
+  /* 8 crans fins, blanc cassé, couronne un peu plus étroite : plus fin, moins criard */
+  background:repeating-conic-gradient(from -9deg,#E8EDF4 0 18deg,transparent 18deg 45deg);
+  /* couronne recentrée : décollée du bord (qui la rognait), bien visible */
+  -webkit-mask:radial-gradient(circle,transparent 54%,#000 55%,#000 84%,transparent 85%);
+  mask:radial-gradient(circle,transparent 54%,#000 55%,#000 84%,transparent 85%)}
+/* cœur : cerclé d'un filet blanc, fond du bandeau */
+.tab.add .ic::after{content:'';position:absolute;inset:13px;border-radius:50%;
+  background:var(--tabbg);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.55),inset 0 2px 5px rgba(0,0,0,.45)}
+.tab.add .ic svg{position:relative;z-index:1}
+.tab.add:active .ic{transform:scale(.95)}
 .tab.add .ic svg{display:block}
 .tab.add{color:var(--cyan)}
-.tab.add.on .ic{background:linear-gradient(160deg,#00E5D4,#00A99B);color:#04211F}
+.tab.add.on .ic{box-shadow:0 0 0 1px rgba(255,255,255,.22),0 0 14px rgba(0,216,200,.35),0 8px 20px rgba(0,0,0,.5)}
 
 .lbl{font-family:var(--fd);font-size:12px;color:var(--muted);letter-spacing:.1em;
   font-weight:700;margin:2px 0 10px;display:flex;align-items:center;gap:8px}
@@ -150,6 +165,7 @@ button{font-family:var(--font)}
 .chadd{width:26px;height:26px;border-radius:7px;border:1px solid var(--line2);display:flex;
   align-items:center;justify-content:center;color:var(--cyan);font-weight:800}
 .shby{font-size:11px;color:var(--muted);margin:10px 4px 4px}
+.invcard{border-color:var(--cyan-d);margin-bottom:10px}
 .unshare{color:var(--raise);cursor:pointer;text-decoration:underline}
 .ib.nb{position:relative}
 .pill{position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;
@@ -742,7 +758,7 @@ async function cloudLoad(){
   /* uid AVANT tout : DB.me n'est renseigné qu'en fin de fonction, et la
      globale session est la seule source fiable à cet instant */
   const uid=session&&session.user?session.user.id:null;
-  const [pr,hd,rc,cm,fl,ss,cl,cmb,chn,chh]=await Promise.all([
+  const [pr,hd,rc,cm,fl,ss,cl,cmb,chn,chh,inv]=await Promise.all([
     sb.from('profiles').select('*'),
     sb.from('hands').select('*').order('created_at',{ascending:false}).limit(200),
     sb.from('reactions').select('*'),
@@ -753,8 +769,10 @@ async function cloudLoad(){
     sb.from('clubs').select('*'),
     sb.from('club_members').select('*'),
     sb.from('channels').select('*').order('pos',{ascending:true}),
-    sb.from('club_hands').select('*').order('created_at',{ascending:false})
+    sb.from('club_hands').select('*').order('created_at',{ascending:false}),
+    sb.from('club_invites').select('*')
   ]);
+  DB.clubInvites=(inv.data||[]).map(x=>({club:x.club_id,user:x.user_id,by:x.invited_by,at:Date.parse(x.created_at)}));
   DB.clubs=(cl.data||[]).map(c=>({id:c.id,name:c.name,code:c.code,owner:c.owner_id}));
   DB.clubMembers=(cmb.data||[]).map(m=>({club:m.club_id,user:m.user_id,role:m.role}));
   DB.channels=(chn.data||[]).map(x=>({id:x.id,club:x.club_id,parent:x.parent_id,name:x.name,pos:x.pos}));
@@ -1077,8 +1095,8 @@ function renderTabs(){
   if(v==='setup'||v==='entry'||v==='result'){ tabs.style.display='none'; return; }
   tabs.style.display='flex';
   const n=unseenCount();
-  const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">'
-   +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/></svg>','SAISIR'],
+  const items=[['home','\u25A4','FEED'],['week','\u2605','HOT'],['setup','<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">'
+   +'<path d="M12 4.5v15M4.5 12h15" stroke="currentColor" stroke-width="3.6" stroke-linecap="round"/></svg>','SAISIR'],
     ['club','\u2663','CLUB'],['profile','\u25CF','MY POKER']];
   tabs.innerHTML=items.map(([k,ic,l])=>'<button class="tab'+(v===k?' on':'')+(k==='setup'?' add':'')
     +'" data-v="'+k+'"><span class="ic"'+(k==='activity'&&n?' style="color:var(--cyan)"':'')+'>'
@@ -1377,9 +1395,11 @@ function myEvents(){
   });
   return ev.sort((a,b)=>b.at-a.at);
 }
+function myInvites(){ return (DB.clubInvites||[]).filter(i=>i.user===DB.me); }
 function unseenCount(){
   const seen=store.get('seenAt')||0;
-  return myEvents().filter(e=>e.at>seen).length;
+  /* une invitation reste comptée tant qu'on n'y a pas répondu */
+  return myEvents().filter(e=>e.at>seen).length+myInvites().length;
 }
 function viewActivity(){
   header('Notifications');
@@ -1390,7 +1410,15 @@ function viewActivity(){
       +'<button class="btn full" id="join">CRÉER MON COMPTE</button>';
     $('join').onclick=()=>go('auth'); return;
   }
-  body.innerHTML=(ev.length
+  const invs=myInvites();
+  const invHTML=invs.length?'<span class="lbl">'+invs.length+' INVITATION'+(invs.length>1?'S':'')+' DE CLUB</span>'
+    +invs.map(i=>{ const c=(DB.clubs||[]).find(x=>x.id===i.club);
+      return '<div class="pcard invcard"><div style="font-weight:700">\u2663 '+esc(c?c.name:'Club')+'</div>'
+       +'<div style="font-size:12.5px;color:var(--muted);margin:3px 0 10px">@'+esc(player(i.by||DB.me).handle)+' t\'invite à rejoindre ce club.</div>'
+       +'<div style="display:flex;gap:8px"><button class="btn" data-decline="'+i.club+'" style="flex:1">REFUSER</button>'
+       +'<button class="btn pri" data-accept="'+i.club+'" style="flex:2">ACCEPTER</button></div></div>'; }).join('')
+    +'<div class="rule"></div>':'';
+  body.innerHTML=invHTML+(ev.length
     ? '<span class="lbl">'+ev.length+' RÉACTIONS À TES MAINS</span>'
       +ev.map(e=>'<button class="hc" style="cursor:pointer" data-h="'+e.hand.id+'">'
         +'<div class="top"><div class="av">'+initials(e.by)+'</div>'
@@ -1401,9 +1429,19 @@ function viewActivity(){
         +(e.body?'<div class="q">\u00ab '+e.body+' \u00bb</div>':'')
         +'<div class="meta" style="color:var(--dim)">sur \u00b7 '+e.hand.question+'</div>'
         +'</button>').join('')
-    : '<div class="empty"><div class="big">Rien pour l\'instant</div>'
+    : invs.length?'':'<div class="empty"><div class="big">Rien pour l\'instant</div>'
       +'<p>Quand quelqu\'un like ou commente une de tes mains, tu le verras ici.</p></div>');
   body.querySelectorAll('[data-h]').forEach(b=>b.onclick=()=>go('hand',{id:b.dataset.h}));
+  body.querySelectorAll('[data-accept]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; b.textContent='\u2026';
+    const r=await sb.rpc('accept_invite',{p_club:b.dataset.accept});
+    if(r.error){ b.disabled=false; b.textContent='ACCEPTER'; alert(r.error.message.replace(/^.*?: /,'')); return; }
+    await cloudLoad(); go('clubroom',{id:b.dataset.accept});
+  });
+  body.querySelectorAll('[data-decline]').forEach(b=>b.onclick=async()=>{
+    const r=await sb.from('club_invites').delete().eq('club_id',b.dataset.decline).eq('user_id',DB.me);
+    if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); render();
+  });
 }
 
 /* ---------- fil ---------- */
@@ -1962,12 +2000,22 @@ function viewClub(id){
      +(c.owner===DB.me&&m.user!==DB.me
        ?'<button class="btn fdel" data-role="'+m.user+'" data-cur="'+m.role+'">'+(m.role==='admin'?'RETIRER ADMIN':'NOMMER ADMIN')+'</button>':'')
      +'</div>').join('')
+   +(admin&&(DB.clubInvites||[]).some(i=>i.club===id)
+     ?'<span class="lbl" style="margin-top:12px">INVITATIONS EN ATTENTE</span>'
+      +(DB.clubInvites||[]).filter(i=>i.club===id).map(i=>'<div class="frow"><span class="fgo" style="cursor:default">'
+        +'<span class="av">'+initials(i.user)+'</span><span class="fh">@'+esc(player(i.user).handle)+'<i>en attente de réponse</i></span></span>'
+        +'<button class="btn fdel" data-cancel="'+i.user+'">ANNULER</button></div>').join('')
+     :'')
    +'<div class="rule"></div>'
    +(c.owner===DB.me
      ?'<button class="btn full" id="cl-del" style="color:var(--raise);border-color:var(--raise-d)">SUPPRIMER LE CLUB</button>'
      :'<button class="btn full" id="cl-leave">QUITTER LE CLUB</button>');
   $('cb-copy').onclick=async()=>{ try{ await navigator.clipboard.writeText(c.code); $('cb-copy').textContent='\u2713'; }catch(e){ prompt('Code :',c.code); } };
   const inv=$('cl-inv'); if(inv) inv.onclick=()=>inviteSheet(id);
+  body.querySelectorAll('[data-cancel]').forEach(b=>b.onclick=async()=>{
+    const r=await sb.from('club_invites').delete().eq('club_id',id).eq('user_id',b.dataset.cancel);
+    if(r.error){ alert('Base : '+r.error.message); return; } await cloudLoad(); render();
+  });
   body.querySelectorAll('.chrow').forEach(b=>b.onclick=()=>go('channel',{id:b.dataset.ch}));
   const addChannel=parent=>{
     const name=prompt(parent?'Nom du sous-salon :':'Nom du salon :'); if(!name||!name.trim()) return;
@@ -1995,7 +2043,8 @@ function viewClub(id){
 }
 /* Inviter directement : mes abonnements + mes abonnés qui ne sont pas encore membres. */
 function inviteSheet(clubId){
-  const me=DB.players[DB.me], inClub=new Set(clubMembers(clubId).map(m=>m.user));
+  const me=DB.players[DB.me], inClub=new Set([...clubMembers(clubId).map(m=>m.user),
+    ...(DB.clubInvites||[]).filter(i=>i.club===clubId).map(i=>i.user)]);
   const ids=new Set([...(me.following||[]),
     ...Object.values(DB.players).filter(q=>(q.following||[]).includes(DB.me)).map(q=>q.id)]);
   const list=[...ids].filter(x=>x!==DB.me&&!inClub.has(x)).map(x=>DB.players[x]).filter(Boolean);
@@ -2003,7 +2052,7 @@ function inviteSheet(clubId){
   m.innerHTML='<div class="sheet"><h2>Inviter dans le club</h2>'
    +(list.length?list.map(q=>'<div class="frow"><span class="fgo" style="cursor:default">'
       +'<span class="av">'+initials(q.id)+'</span><span class="fh">@'+esc(q.handle)+'<i>'+esc(q.name)+'</i></span></span>'
-      +'<button class="btn" data-inv="'+q.id+'">AJOUTER</button></div>').join('')
+      +'<button class="btn" data-inv="'+q.id+'">INVITER</button></div>').join('')
      :'<div class="empty" style="padding:16px 0"><p>Tous tes amis sont déjà là \u2014 ou tu n\'en suis aucun. '
       +'Le code d\'invitation marche pour tout le monde.</p></div>')
    +'<button class="btn full" id="inv-x" style="margin-top:10px">FERMER</button></div>';
@@ -2011,9 +2060,9 @@ function inviteSheet(clubId){
   m.querySelector('#inv-x').onclick=()=>m.remove();
   m.querySelectorAll('[data-inv]').forEach(b=>b.onclick=async()=>{
     b.disabled=true; b.textContent='\u2026';
-    const r=await sb.from('club_members').insert({club_id:clubId,user_id:b.dataset.inv,role:'member'});
-    if(r.error){ b.disabled=false; b.textContent='AJOUTER'; alert('Base : '+r.error.message); return; }
-    b.textContent='\u2713 AJOUTÉ'; await cloudLoad(); render();
+    const r=await sb.from('club_invites').insert({club_id:clubId,user_id:b.dataset.inv,invited_by:DB.me});
+    if(r.error){ b.disabled=false; b.textContent='INVITER'; alert('Base : '+r.error.message); return; }
+    b.textContent='\u2713 INVITÉ'; await cloudLoad(); render();
   });
 }
 async function ensureHands(ids){
