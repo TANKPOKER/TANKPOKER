@@ -349,14 +349,14 @@ button{font-family:var(--font)}
   border-color:var(--cyan-d);background:var(--cyan-i)}
 
 /* ---------- table (rejeu optionnel) ---------- */
-.tw{position:relative;width:100%;height:390px;margin:2px 0 18px}
+.tw{position:relative;width:100%;height:390px;margin:22px 0 18px}
 /* En saisie, la table partage l'écran avec sizings + actions : plus compacte,
    et encore un cran de moins sur les petits téléphones. Le replay garde 390px. */
-.ent .tw{height:clamp(212px,calc(100dvh - 500px),308px);margin:0 0 40px}
+.ent .tw{height:clamp(212px,calc(100dvh - 520px),308px);margin:22px 0 40px}
 /* iOS Safari : au premier affichage la barre d'adresse est grande — svh est la
    hauteur GARANTIE dès le premier rendu, avant tout glissement */
 @supports (height:100svh){
-  .ent .tw{height:clamp(212px,calc(100svh - 500px),308px)}
+  .ent .tw{height:clamp(212px,calc(100svh - 520px),308px)}
 }
 .ent .seat{width:76px}
 .ent .potline{margin-top:6px}
